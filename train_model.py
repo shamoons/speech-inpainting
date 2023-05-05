@@ -1,3 +1,4 @@
+# train_model.py
 import os
 import torch
 import torch.nn as nn
@@ -11,29 +12,23 @@ from reconstruction import reconstruct_and_save
 
 
 def main():
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    # Check that MPS is available
-    if not torch.backends.mps.is_available():
-        if not torch.backends.mps.is_built():
-            print("MPS not available because the current PyTorch install was not "
-                  "built with MPS enabled.")
-        else:
-            print("MPS not available because the current MacOS version is not 12.3+ "
-                  "and/or you do not have an MPS-enabled device on this machine.")
-
-    else:
-        print("MPS is available and will be used.")
-        device = torch.device("mps")
-
     args = parse_args()
 
+    if args.use_mps and torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif args.use_cuda and torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+
     train_dataset = SPEECHCOMMANDS('./data', download=True)
-    n_mels = 128
-    mel_train_dataset = MelSpectrogramDataset(train_dataset, n_mels=n_mels)
-    mel_train_dataset = MelSpectrogramDataset(train_dataset)
+    n_mels = 80
+    d_model = 80
+    mel_train_dataset = MelSpectrogramDataset(train_dataset, n_mels=d_model)
     train_loader = DataLoader(mel_train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
-    model = TransformerAutoencoder(d_model=128, nhead=4, num_layers=2, dim_feedforward=512, max_length=1600).to(device)
+    model = TransformerAutoencoder(d_model=80, nhead=4, num_layers=2, dim_feedforward=512, max_length=1600).to(device)
+
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.MSELoss()
 
@@ -60,7 +55,8 @@ def main():
             # Print statistics every log_interval batches
             if (i + 1) % args.log_interval == 0:
                 avg_loss = total_loss / args.log_interval
-                print(f'Epoch [{epoch + 1}/{num_epochs}], Batch [{i + 1}/{len(train_loader)}], Average Loss: {avg_loss:.4f}')
+                print(f'Epoch [{epoch + 1}/{num_epochs}], Batch [{i + 1}/{len(train_loader)}], '
+                      f'Average Loss: {avg_loss:.4f}')
                 total_loss = 0  # Reset total_loss for the next log_interval batches
 
         # Save checkpoint
