@@ -8,4 +8,7 @@ def parse_args():
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to the checkpoint to resume training')
     parser.add_argument('--output_dir', type=str, default='./data/output',
                         help='Output directory for reconstructed WAV files')
+    parser.add_argument('--log_interval', type=int, default=100,
+                        help='Interval (in batches) at which to log training statistics')
+    parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
     return parser.parse_args()

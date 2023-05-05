@@ -165,3 +165,5 @@ venv/
 *.pyc
 data/
 !data/.gitkeep
+.DS_Store
+*.pth

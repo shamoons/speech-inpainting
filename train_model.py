@@ -26,9 +26,12 @@ def main():
         device = torch.device("mps")
 
     args = parse_args()
+
     train_dataset = SPEECHCOMMANDS('./data', download=True)
+    n_mels = 128
+    mel_train_dataset = MelSpectrogramDataset(train_dataset, n_mels=n_mels)
     mel_train_dataset = MelSpectrogramDataset(train_dataset)
-    train_loader = DataLoader(mel_train_dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(mel_train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
     model = TransformerAutoencoder(d_model=128, nhead=4, num_layers=2, dim_feedforward=512, max_length=1600).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -54,6 +57,12 @@ def main():
             loss.backward()
             optimizer.step()
 
+            # Print statistics every log_interval batches
+            if (i + 1) % args.log_interval == 0:
+                avg_loss = total_loss / args.log_interval
+                print(f'Epoch [{epoch + 1}/{num_epochs}], Batch [{i + 1}/{len(train_loader)}], Average Loss: {avg_loss:.4f}')
+                total_loss = 0  # Reset total_loss for the next log_interval batches
+
         # Save checkpoint
         torch.save({
             'epoch': epoch + 1,
@@ -69,11 +78,9 @@ def main():
             for mel_specgrams, labels in train_loader:
                 mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
                 outputs = model(mel_specgrams)
-                # 'outputs' contains the reconstructed Mel spectrograms
-                break  # Process only one batch for demonstration
-
+                break
         # Along with the reconstructed file, save the original file
-        reconstruct_and_save(outputs, mel_specgrams, args.output_dir, epoch + 1)
+        reconstruct_and_save(outputs, mel_specgrams, args.output_dir, epoch + 1, n_mels=n_mels)
 
     # Note: The reconstructed Mel spectrograms ('outputs') can be converted back
     # to raw audio using an inverse Mel-spectrogram transformation if needed.

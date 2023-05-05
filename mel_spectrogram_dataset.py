@@ -6,13 +6,13 @@ from torch.utils.data import Dataset
 
 
 class MelSpectrogramDataset(Dataset):
-    def __init__(self, speechcommands_dataset):
+    def __init__(self, speechcommands_dataset, n_mels=128):
         self.speechcommands_dataset = speechcommands_dataset
+        self.n_mels = n_mels
 
     def __getitem__(self, index):
-        waveform, sample_rate, label, speaker_id, utterance_number = self.speechcommands_dataset[
-            index]
-        mel_specgram = torchaudio.transforms.MelSpectrogram()(waveform)
+        waveform, sample_rate, label, speaker_id, utterance_number = self.speechcommands_dataset[index]
+        mel_specgram = torchaudio.transforms.MelSpectrogram(n_mels=self.n_mels)(waveform)
         return mel_specgram.squeeze(0).transpose(0, 1), label
 
     def __len__(self):

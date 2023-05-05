@@ -16,10 +16,15 @@ class TransformerAutoencoder(nn.Module):
         self.position_embedding = nn.Embedding(max_length, d_model)
 
     def forward(self, src):
-        positions = torch.arange(0, src.size(
-            0), device=src.device).unsqueeze(1)
+        # Positional encoding
+        positions = torch.arange(0, src.size(0), device=src.device).unsqueeze(1)
         src = src + self.position_embedding(positions)
+        # Encoding
         encoded = self.encoder(src)
+        # Pooling to obtain fixed-size embeddings
         embeddings = encoded.mean(dim=0)
-        decoded = self.decoder(self.fc(embeddings).unsqueeze(0), encoded)
+        # Repeat embeddings to match the sequence length of the input
+        repeated_embeddings = embeddings.repeat(src.size(0), 1, 1)
+        # Decoding
+        decoded = self.decoder(self.fc(repeated_embeddings), encoded)
         return decoded
