@@ -17,7 +17,6 @@ def train_epoch(model, train_loader, optimizer, criterion, device, log_interval)
         if (i + 1) % log_interval == 0:
             avg_loss = total_loss / log_interval
             print(f'Batch [{i + 1}/{len(train_loader)}], Average Loss: {avg_loss:.4f}')
-            total_loss = 0  # Reset total_loss for the next log_interval batches
 
     # Return average loss for the entire epoch
     return total_loss / len(train_loader)

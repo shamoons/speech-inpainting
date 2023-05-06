@@ -44,7 +44,7 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch']
 
-    num_epochs = 10
+    num_epochs = 10 + start_epoch
     for epoch in range(start_epoch, num_epochs):
         avg_loss = train_epoch(model, train_loader, optimizer, criterion, device, args.log_interval)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}')
@@ -57,17 +57,14 @@ def main():
         }, f'checkpoint_epoch_{epoch + 1}.pth')
 
         # Attempt reconstruction after each epoch
-        with torch.no_grad():
-            for mel_specgrams, labels in train_loader:
-                mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
-                # Receive both the final output and the bottleneck output from the model
-                outputs, bottleneck_output = model(mel_specgrams)
-                break
-        # Along with the reconstructed file, save the original file
-        reconstruct_and_save(outputs, mel_specgrams, args.output_dir, epoch + 1, n_mels=d_model)
-
-    # Note: The reconstructed Mel spectrograms ('outputs') can be converted back
-    # to raw audio using an inverse Mel-spectrogram transformation if needed.
+        # with torch.no_grad():
+        #     for mel_specgrams, labels in train_loader:
+        #         mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
+        #         # Receive both the final output and the bottleneck output from the model
+        #         outputs, bottleneck_output = model(mel_specgrams)
+        #         break
+        # # Along with the reconstructed file, save the original file
+        # reconstruct_and_save(outputs, mel_specgrams, args.output_dir, epoch + 1, n_mels=d_model)
 
 
 if __name__ == '__main__':
