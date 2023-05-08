@@ -4,7 +4,7 @@ import torch.nn as nn
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, max_length, bottleneck_dim):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, max_length, bottleneck_dim, dropout=0.5):
         super(TransformerAutoencoder, self).__init__()
         self.d_model = d_model
         self.position_embedding = nn.Embedding(max_length, d_model)
@@ -17,6 +17,7 @@ class TransformerAutoencoder(nn.Module):
         )
         self.fc_out = nn.Linear(d_model, d_model)
         self.bottleneck = nn.Linear(d_model, bottleneck_dim)
+        self.dropout = nn.Dropout(dropout)  # Add dropout layer
         self.bottleneck_expansion = nn.Linear(bottleneck_dim, d_model)
 
     def forward(self, src):
@@ -33,9 +34,11 @@ class TransformerAutoencoder(nn.Module):
 
         # Pass the output through the bottleneck layer
         bottleneck_output = self.bottleneck(output)
+        bottleneck_output = self.dropout(bottleneck_output)  # Apply dropout
 
         # Expand the bottleneck output back to the original dimension
         output = self.bottleneck_expansion(bottleneck_output)
+        output = self.dropout(output)  # Apply dropout
 
         # Pass the output through the final linear layer
         output = self.fc_out(output)

@@ -1,25 +1,62 @@
-# reconstruct.py
 import os
-import random
 import torch
+import matplotlib.pyplot as plt
 from transformer_autoencoder import TransformerAutoencoder
 from mel_spectrogram_dataset import MelSpectrogramDataset
-import torchaudio.transforms as transforms
+from torch.utils.data import DataLoader
 import argparse
 import torchaudio
+import numpy as np
+from torchaudio.transforms import InverseMelScale, GriffinLim
+
+
+# Define the parameters for the InverseMelScale and GriffinLim transforms
+n_mels = 128
+n_fft = 2048
+n_iter = 128
+win_length = 1200
+hop_length = 480
+n_stft = n_fft // 2 + 1
+sample_rate = 16000
+
+
+def plot_spectrogram(spec, output_file):
+    fig, ax = plt.subplots()
+    img = plt.imshow(spec, aspect='auto', origin='lower', cmap='inferno')
+    plt.colorbar(img, ax=ax)
+
+    # Calculate the time for each frame
+    time_per_frame = hop_length / sample_rate
+    total_time = spec.shape[1] * time_per_frame
+
+    # Set the x-axis ticks and labels for every 0.2 seconds
+    tick_interval = 0.2
+    num_ticks = int(total_time / tick_interval)
+    x_ticks = np.arange(0, spec.shape[1], spec.shape[1] / num_ticks)
+    x_tick_labels = [f"{i * tick_interval:.1f}" for i in range(len(x_ticks))]
+
+    # Set the x-axis ticks and labels
+    plt.xticks(x_ticks, x_tick_labels)
+    plt.xlabel('Time (s)')
+    plt.ylabel('Frequency')
+    plt.tight_layout()
+    plt.savefig(output_file)
+    plt.close()
 
 
 def reconstruct_and_save(checkpoint_path, output_dir):
-    if torch.cuda.is_available():
+    if torch.backends.mps.is_available():
+        device = torch.device('mps')
+    elif torch.cuda.is_available():
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
 
-    d_model = 80
+    d_model = n_mels
     # Define the bottleneck dimension
-    bottleneck_dim = 40
+    bottleneck_dim = 128
 
     # Instantiate the TransformerAutoencoder
     model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
@@ -31,42 +68,52 @@ def reconstruct_and_save(checkpoint_path, output_dir):
 
     # Instantiate the MelSpectrogramDataset
     mel_train_dataset = MelSpectrogramDataset(n_mels=d_model)
-    random_sample_index = torch.randint(0, len(mel_train_dataset), (1,))
-    mel_specgram, filename = mel_train_dataset[random_sample_index.item()]
+    train_loader = DataLoader(mel_train_dataset, batch_size=1,
+                              shuffle=True, collate_fn=mel_train_dataset.collate_fn)
 
-    # Preprocess the waveform using MelSpectrogram
-    mel_transform = transforms.MelSpectrogram(sample_rate=16000, n_mels=d_model, hop_length=160)
-    mel_specgram = mel_transform(mel_specgram)
+    for i, (mel_specgrams, labels) in enumerate(train_loader):
+        mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
+        # Receive both the final output and the bottleneck output from the model
+        outputs, bottleneck_output = model(mel_specgrams)
 
-    # Convert the mel spectrogram to tensor
-    mel_specgram = mel_specgram.unsqueeze(0).to(device)
+        # Save the spectrogram of the original audio and the reconstructed audio
+        original_spec_path = os.path.join(output_dir, f"original_{labels[0]}_spec.png")
+        reconstructed_spec_path = os.path.join(output_dir, f"reconstructed_{labels[0]}_spec.png")
 
-    # Run the model and perform reconstruction
-    with torch.no_grad():
-        output, _ = model(mel_specgram)
+        # Squeeze the tensors, detach them, and move them to the CPU
+        original_mel_specgram = mel_specgrams.squeeze().detach().cpu().numpy()
+        reconstructed_mel_specgram = outputs.squeeze().detach().cpu().numpy()
 
-    # Convert the output tensor to the waveform
-    reconstructed_waveform = output.squeeze().transpose(0, 1).cpu()
+        # Plot and save the spectrograms
+        plot_spectrogram(original_mel_specgram, original_spec_path)
+        plot_spectrogram(reconstructed_mel_specgram, reconstructed_spec_path)
 
-    # Scale the waveform back to the original range
-    reconstructed_waveform = (reconstructed_waveform * 0.5) + 0.5
+        # Instantiate the InverseMelScale transform
+        inverse_mel_scale = InverseMelScale(n_stft=n_stft, n_mels=n_mels, sample_rate=sample_rate)
 
-    # Convert the waveform to mono if needed
-    if reconstructed_waveform.ndim == 3:
-        reconstructed_waveform = reconstructed_waveform.mean(dim=0)
+        # Convert the numpy array to a PyTorch tensor and add a batch dimension
+        original_mel_specgram_tensor = torch.from_numpy(original_mel_specgram).unsqueeze(0)
+        reconstructed_mel_specgram_tensor = torch.from_numpy(reconstructed_mel_specgram).unsqueeze(0)
 
-    # Create the output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+        # Convert the Mel spectrogram to a linear-frequency spectrogram
+        original_linear_specgram = inverse_mel_scale(original_mel_specgram_tensor)
+        reconstructed_linear_specgram = inverse_mel_scale(reconstructed_mel_specgram_tensor)
 
-    # Save the reconstructed waveform as an audio file
-    file_name = os.path.splitext(os.path.basename(filename))[0]
-    reconstructed_file_path = os.path.join(output_dir, f"reconstructed_{file_name}.wav")
-    torchaudio.save(reconstructed_file_path, reconstructed_waveform, 16000)
+        # Instantiate the Griffin-Lim transform
+        griffin_lim = GriffinLim(n_fft=n_fft, win_length=win_length, hop_length=hop_length, n_iter=n_iter)
 
-    # Save the original waveform as an audio file
-    original_file_path = os.path.join(output_dir, f"original_{file_name}.wav")
-    waveform, sample_rate = torchaudio.load(filename)
-    torchaudio.save(original_file_path, waveform, sample_rate)
+        # Use the Griffin-Lim algorithm to reconstruct the waveform from the linear-frequency spectrogram
+        original_waveform = griffin_lim(original_linear_specgram)
+        reconstructed_waveform = griffin_lim(reconstructed_linear_specgram)
+
+        # Save the waveform as a .wav file
+        original_audio_path = os.path.join(output_dir, f"original_{labels[0]}_audio.wav")
+        reconstructed_audio_path = os.path.join(output_dir, f"reconstructed_{labels[0]}_audio.wav")
+
+        torchaudio.save(original_audio_path, original_waveform, sample_rate)
+        torchaudio.save(reconstructed_audio_path, reconstructed_waveform, sample_rate)
+
+        break
 
 
 # Create the argument parser

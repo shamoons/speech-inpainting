@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from transformer_autoencoder import TransformerAutoencoder
 from mel_spectrogram_dataset import MelSpectrogramDataset
 from arg_parser import parse_args
-from reconstruction import reconstruct_and_save
 from batch_train_loop import train_epoch
 
 
@@ -23,17 +22,21 @@ def main():
 
     print(f"Using device: {device}")
 
-    d_model = 80
+    d_model = 128
     mel_train_dataset = MelSpectrogramDataset(n_mels=d_model)
+
+    print(f"Total number of training data examples: {len(mel_train_dataset)}")
+
     train_loader = DataLoader(mel_train_dataset, batch_size=args.batch_size,
                               shuffle=True, collate_fn=mel_train_dataset.collate_fn)
 
     # Define the bottleneck dimension
-    bottleneck_dim = 40
+    bottleneck_dim = 128
 
     # Instantiate the TransformerAutoencoder with the bottleneck_dim parameter
     model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
-                                   dim_feedforward=512, max_length=1600, bottleneck_dim=bottleneck_dim).to(device)
+                                   dim_feedforward=512, max_length=1600,
+                                   bottleneck_dim=bottleneck_dim, dropout=0.5).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     criterion = nn.MSELoss()
 
@@ -55,16 +58,6 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
         }, f'checkpoint_epoch_{epoch + 1}.pth')
-
-        # Attempt reconstruction after each epoch
-        # with torch.no_grad():
-        #     for mel_specgrams, labels in train_loader:
-        #         mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
-        #         # Receive both the final output and the bottleneck output from the model
-        #         outputs, bottleneck_output = model(mel_specgrams)
-        #         break
-        # # Along with the reconstructed file, save the original file
-        # reconstruct_and_save(outputs, mel_specgrams, args.output_dir, epoch + 1, n_mels=d_model)
 
 
 if __name__ == '__main__':
