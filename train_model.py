@@ -47,7 +47,7 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch']
 
-    num_epochs = 10 + start_epoch
+    num_epochs = args.epochs + start_epoch
     for epoch in range(start_epoch, num_epochs):
         avg_loss = train_epoch(model, train_loader, optimizer, criterion, device, args.log_interval)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}')

@@ -1,11 +1,15 @@
 # batch_train_loop.py
 import torch
+import tqdm
+import datetime  # Import the datetime module
 
 
-def train_epoch(model, train_loader, optimizer, criterion, device, log_interval, l1_lambda=0.001):
+def train_epoch(model, train_loader, optimizer, criterion, device, l1_lambda=0.001):
     model.train()
     total_loss = 0
-    for i, (mel_specgrams, labels) in enumerate(train_loader):
+    # Wrap the train_loader with tqdm to create a progress bar
+    progress_bar = tqdm(train_loader, desc='Training', unit='batch')
+    for i, (mel_specgrams, labels, waveform_lengths) in enumerate(progress_bar):
         mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
         optimizer.zero_grad()
         # Receive both the final output and the bottleneck output from the model
@@ -21,10 +25,10 @@ def train_epoch(model, train_loader, optimizer, criterion, device, log_interval,
         total_loss += mse_loss.item()
         loss.backward()
         optimizer.step()
-        # Print statistics every log_interval batches
-        if (i + 1) % log_interval == 0:
-            avg_loss = total_loss / (i + 1)
-            print(f'\tBatch [{i + 1}/{len(train_loader)}], Average Loss: {avg_loss:.4f}')
+        # Update the description of the progress bar with the average loss and current time
+        avg_loss = total_loss / (i + 1)
+        current_time = datetime.datetime.now().strftime('%H:%M:%S')
+        progress_bar.set_description(f'Training (Average Loss: {avg_loss:.4f}, Time: {current_time})')
 
     # Return average loss for the entire epoch
     return total_loss / len(train_loader)

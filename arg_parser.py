@@ -4,6 +4,7 @@ import argparse
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train Transformer Autoencoder')
+    parser.add_argument('--epochs', type=int, default=10, help='Epochs')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to the checkpoint to resume training')
     parser.add_argument('--output_dir', type=str, default='./data/output',
