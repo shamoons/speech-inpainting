@@ -20,7 +20,14 @@ class TransformerAutoencoder(nn.Module):
         self.dropout = nn.Dropout(dropout)  # Add dropout layer
         self.bottleneck_expansion = nn.Linear(bottleneck_dim, d_model)
 
+        # Define new Linear layers
+        self.input_linear = nn.Linear(d_model, d_model)
+        self.output_linear = nn.Linear(d_model, d_model)
+
     def forward(self, src):
+        # Apply the input Linear layer
+        src = self.input_linear(src)
+
         # Dynamically generate position embeddings based on the number of time frames
         num_time_frames = src.size(1)
         positions = torch.arange(0, num_time_frames).unsqueeze(1).to(src.device)
@@ -42,5 +49,8 @@ class TransformerAutoencoder(nn.Module):
 
         # Pass the output through the final linear layer
         output = self.fc_out(output)
+
+        # Apply the output Linear layer
+        output = self.output_linear(output)
 
         return output, bottleneck_output
