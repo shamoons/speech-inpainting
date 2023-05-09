@@ -1,56 +1,64 @@
 # transformer_autoencoder.py
 import torch
 import torch.nn as nn
+import math
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, max_length, bottleneck_dim, dropout=0.5):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck_dim, dropout=0.5):
         super(TransformerAutoencoder, self).__init__()
-        self.d_model = d_model
-        self.position_embedding = nn.Embedding(max_length, d_model)
-        self.transformer = nn.Transformer(
-            d_model=d_model,
-            nhead=nhead,
-            num_encoder_layers=num_layers,
-            num_decoder_layers=num_layers,
-            dim_feedforward=dim_feedforward
-        )
-        self.fc_out = nn.Linear(d_model, d_model)
-        self.bottleneck = nn.Linear(d_model, bottleneck_dim)
-        self.dropout = nn.Dropout(dropout)  # Add dropout layer
-        self.bottleneck_expansion = nn.Linear(bottleneck_dim, d_model)
 
-        # Define new Linear layers
-        self.input_linear = nn.Linear(d_model, d_model)
-        self.output_linear = nn.Linear(d_model, d_model)
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout),
+            num_layers=num_layers
+        )
+
+        self.decoder = nn.TransformerDecoder(
+            decoder_layer=nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout),
+            num_layers=num_layers
+        )
+
+        self.bottleneck = nn.Linear(d_model, bottleneck_dim)
+        self.bottleneck_expansion = nn.Linear(bottleneck_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.d_model = d_model
+        self.relu = nn.ReLU()
 
     def forward(self, src):
-        # Apply the input Linear layer
-        src = self.input_linear(src)
-
-        # Dynamically generate position embeddings based on the number of time frames
         num_time_frames = src.size(1)
-        positions = torch.arange(0, num_time_frames).unsqueeze(1).to(src.device)
-        position_embeddings = self.position_embedding(positions).transpose(0, 1)
 
-        # Add position embeddings to the input Mel spectrograms
+        # Generate sinusoidal position embeddings
+        position_embeddings = self._get_sinusoidal_position_embeddings(num_time_frames, self.d_model).to(src.device)
+
+        # Add position embeddings to input, shape: (batch_size, num_time_frames, d_model)
         src = src + position_embeddings
 
-        # Pass the input through the transformer
-        output = self.transformer(src, src)
+        # Pass the input through the encoder, shape: (batch_size, num_time_frames, d_model)
+        encoded = self.encoder(src)
 
-        # Pass the output through the bottleneck layer
-        bottleneck_output = self.bottleneck(output)
-        bottleneck_output = self.dropout(bottleneck_output)  # Apply dropout
+        # Pass the encoded output through the bottleneck layer, shape: (batch_size, num_time_frames, bottleneck_dim)
+        bottleneck_output = self.bottleneck(encoded)
+        bottleneck_output = self.dropout(bottleneck_output)
 
-        # Expand the bottleneck output back to the original dimension
-        output = self.bottleneck_expansion(bottleneck_output)
-        output = self.dropout(output)  # Apply dropout
+        # Expand the bottleneck output back to the original dimension, shape: (batch_size, num_time_frames, d_model)
+        expanded = self.bottleneck_expansion(bottleneck_output)
+        expanded = self.dropout(expanded)
 
-        # Pass the output through the final linear layer
-        output = self.fc_out(output)
+        # Pass the expanded output through the decoder, shape: (batch_size, num_time_frames, d_model)
+        decoded = self.decoder(expanded, encoded)
 
-        # Apply the output Linear layer
-        output = self.output_linear(output)
+        # Apply the ReLU activation to the decoded output
+        decoded = self.relu(decoded)
 
-        return output, bottleneck_output
+        return decoded, bottleneck_output
+
+    def _get_sinusoidal_position_embeddings(self, num_positions, d_model):
+        position_embeddings = torch.zeros(num_positions, d_model)
+        positions = torch.arange(0, num_positions, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+
+        position_embeddings[:, 0::2] = torch.sin(positions * div_term)
+        position_embeddings[:, 1::2] = torch.cos(positions * div_term)
+        position_embeddings = position_embeddings.unsqueeze(0)
+
+        return position_embeddings

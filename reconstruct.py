@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 import argparse
 import torchaudio
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 from torchaudio.transforms import InverseMelScale, GriffinLim
 
 
@@ -32,7 +33,11 @@ def plot_spectrogram(spec, output_file, waveform_length):
     spec = spec[:, :actual_frames]
 
     img = plt.imshow(spec, aspect='auto', origin='lower', cmap='inferno')
-    plt.colorbar(img, ax=ax)
+    colorbar = plt.colorbar(img, ax=ax)
+
+    # Set the colorbar labels to have two decimal precision
+    colorbar.formatter = FuncFormatter(lambda x, pos: f"{x:.2f}")
+    colorbar.update_ticks()
 
     # Set the x-axis ticks and labels for every 0.2 seconds
     tick_interval = 0.2
@@ -65,7 +70,7 @@ def reconstruct_and_save(checkpoint_path, output_dir):
 
     # Instantiate the TransformerAutoencoder
     model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
-                                   dim_feedforward=512, max_length=1600, bottleneck_dim=bottleneck_dim).to(device)
+                                   dim_feedforward=512, bottleneck_dim=bottleneck_dim).to(device)
 
     # Load the checkpoint
     checkpoint = torch.load(checkpoint_path, map_location=device)
