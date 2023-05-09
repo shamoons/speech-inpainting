@@ -14,10 +14,9 @@ from torchaudio.transforms import InverseMelScale, GriffinLim
 
 # Define the parameters for the InverseMelScale and GriffinLim transforms
 n_mels = 128
-n_fft = 2048
+n_fft = 256
 n_iter = 128
-win_length = 1200
-hop_length = 480
+hop_length = n_fft // 2
 n_stft = n_fft // 2 + 1
 sample_rate = 16000
 
@@ -111,7 +110,7 @@ def reconstruct_and_save(checkpoint_path, output_dir):
         reconstructed_linear_specgram = inverse_mel_scale(reconstructed_mel_specgram_tensor)
 
         # Instantiate the Griffin-Lim transform
-        griffin_lim = GriffinLim(n_fft=n_fft, win_length=win_length, hop_length=hop_length,
+        griffin_lim = GriffinLim(n_fft=n_fft, hop_length=hop_length,
                                  n_iter=n_iter)
 
         # Use the Griffin-Lim algorithm to reconstruct the waveform from the linear-frequency spectrogram

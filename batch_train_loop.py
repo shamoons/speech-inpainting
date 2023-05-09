@@ -18,6 +18,14 @@ def train_epoch(model, train_loader, optimizer, device):
         outputs, bottleneck_output = model(mel_specgrams)
         outputs = outputs.transpose(0, 1)
 
+        # # Calculate min, max, and average for input and output
+        # input_min, input_max, input_avg = mel_specgrams.min().item(), mel_specgrams.max().item(), mel_specgrams.mean().item()
+        # output_min, output_max, output_avg = outputs.min().item(), outputs.max().item(), outputs.mean().item()
+
+        # # Print min, max, and average for input and output
+        # print(f'Input - Min: {input_min:.4f}, Max: {input_max:.4f}, Avg: {input_avg:.4f}')
+        # print(f'Output - Min: {output_min:.4f}, Max: {output_max:.4f}, Avg: {output_avg:.4f}')
+
         loss = msle_loss(outputs, mel_specgrams.transpose(0, 1))
         total_loss += loss.item()
         loss.backward()
