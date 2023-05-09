@@ -15,7 +15,7 @@ from torchaudio.transforms import InverseMelScale, GriffinLim
 # Define the parameters for the InverseMelScale and GriffinLim transforms
 n_mels = 128
 n_fft = 256
-n_iter = 128
+n_iter = 256
 hop_length = n_fft // 2
 n_stft = n_fft // 2 + 1
 sample_rate = 16000
@@ -92,6 +92,20 @@ def reconstruct_and_save(checkpoint_path, output_dir):
         # Squeeze the tensors, detach them, and move them to the CPU
         original_mel_specgram = mel_specgrams.squeeze().detach().cpu().numpy()
         reconstructed_mel_specgram = outputs.squeeze().detach().cpu().numpy()
+
+        #  Perform inverse log transformation of: log_mel_specgram = torch.log(mel_specgram + 1)
+        original_mel_specgram = np.exp(original_mel_specgram) - 1
+        reconstructed_mel_specgram = np.exp(reconstructed_mel_specgram) - 1
+
+        # Calculate min, max, and average for input and output
+        input_min, input_max, input_avg = original_mel_specgram.min().item(
+        ), original_mel_specgram.max().item(), original_mel_specgram.mean().item()
+        output_min, output_max, output_avg = reconstructed_mel_specgram.min().item(
+        ), reconstructed_mel_specgram.max().item(), reconstructed_mel_specgram.mean().item()
+
+        # Print min, max, and average for input and output
+        print(f'Input - Min: {input_min:.4f}, Max: {input_max:.4f}, Avg: {input_avg:.4f}')
+        print(f'Output - Min: {output_min:.4f}, Max: {output_max:.4f}, Avg: {output_avg:.4f}')
 
         # Plot and save the spectrograms
         plot_spectrogram(original_mel_specgram, original_spec_path, waveform_lengths[0])

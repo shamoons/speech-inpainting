@@ -16,7 +16,8 @@ class MelSpectrogramDataset(torch.utils.data.Dataset):
         waveform, sample_rate, label, _, _ = self.dataset[index]
         mel_specgram = self.mel_spectrogram(waveform)
 
-        return mel_specgram.squeeze(0), label, waveform.shape[-1]
+        log_mel_specgram = torch.log(mel_specgram + 1)
+        return log_mel_specgram.squeeze(0), label, waveform.shape[-1]
 
     def __len__(self):
         return len(self.dataset)
