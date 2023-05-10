@@ -5,8 +5,8 @@ from torchaudio.datasets import SPEECHCOMMANDS
 
 
 class SpeechCommandsDataset(SPEECHCOMMANDS):
-    def __init__(self, root_dir='./data', transform=None):
-        super().__init__(root_dir, download=True)
+    def __init__(self, root_dir='./data', transform=None, subset='training'):
+        super().__init__(root_dir, download=True, subset=subset)
         self.transform = transform
 
     def __getitem__(self, idx):

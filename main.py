@@ -8,6 +8,22 @@ from tqdm import tqdm
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
 
 
+def validate_epoch(model, dataloader, criterion, device):
+    model.eval()
+    epoch_loss = 0.0
+    with torch.no_grad():
+        progress_bar = tqdm(enumerate(dataloader), total=len(dataloader),
+                            desc='Validate', leave=False)  # create a progress bar
+        for batch_idx, mel_specgrams in progress_bar:
+            mel_specgrams = mel_specgrams.transpose(1, 2).to(device)
+            output, bottleneck_output = model(mel_specgrams)
+            loss = criterion(output, mel_specgrams)
+            epoch_loss += loss.item()
+            progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})  # update the progress bar
+
+    return epoch_loss / len(dataloader)
+
+
 def train_epoch(model, dataloader, criterion, optimizer, device):
     model.train()
     epoch_loss = 0.0
@@ -40,6 +56,7 @@ def main():
 
     transform = melspectrogram_transform(args.n_mels)
     train_dataloader = get_dataloader(args.data_path, args.batch_size, transform)
+    val_dataloader = get_dataloader(args.data_path, args.batch_size, transform, subset='validation')
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=2, num_layers=2,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
@@ -52,15 +69,17 @@ def main():
         start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
 
     for epoch in range(start_epoch, args.epochs):
-        loss = train_epoch(model, train_dataloader, criterion, optimizer, device)
-        print(f"Epoch {epoch + 1}/{args.epochs}, Loss: {loss}")
-        scheduler.step(loss)
+        train_loss = train_epoch(model, train_dataloader, criterion, optimizer, device)
+        val_loss = validate_epoch(model, val_dataloader, criterion, device)  # Add this line
+        print(f"Epoch {epoch + 1}/{args.epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}")
+        scheduler.step(val_loss)
 
         save_checkpoint({
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss
+            'train_loss': train_loss,
+            'val_loss': val_loss
         }, f"./checkpoint_{epoch + 1}.pt")
 
 
