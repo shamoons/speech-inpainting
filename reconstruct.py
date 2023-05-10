@@ -49,7 +49,7 @@ def main():
     plt.imshow(reconstructed, aspect='auto', origin='lower')
     plt.title('Reconstructed')
     plt.tight_layout()
-    plt.savefig('reconstruction.png')
+    plt.savefig('./data/reconstructed/reconstruction.png')
 
     # Inverse transformations to restore audio
     inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
@@ -63,8 +63,8 @@ def main():
     reconstructed_audio = griffin_lim(inv_mel_scale(reconstructed_tensor))
 
     # Save original and reconstructed audio
-    torchaudio.save("original_audio.wav", original_audio.cpu(), sample_rate=16000)
-    torchaudio.save("reconstructed_audio.wav", reconstructed_audio.cpu(), sample_rate=16000)
+    torchaudio.save("./data/reconstructed/original_audio.wav", original_audio.cpu(), sample_rate=16000)
+    torchaudio.save("./data/reconstructed/reconstructed_audio.wav", reconstructed_audio.cpu(), sample_rate=16000)
 
 
 if __name__ == "__main__":
