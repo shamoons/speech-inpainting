@@ -2,6 +2,7 @@
 import torch
 import torch.optim as optim
 from data_loader import get_dataloader
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from model import TransformerAutoencoder
 from tqdm import tqdm
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
@@ -43,7 +44,8 @@ def main():
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=2, num_layers=2,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
     criterion = torch.nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)  # Change this line
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.5)  # Add this line
 
     start_epoch = 0
     if args.checkpoint_path:
@@ -52,6 +54,7 @@ def main():
     for epoch in range(start_epoch, args.epochs):
         loss = train_epoch(model, train_dataloader, criterion, optimizer, device)
         print(f"Epoch {epoch + 1}/{args.epochs}, Loss: {loss}")
+        scheduler.step(loss)
 
         save_checkpoint({
             'epoch': epoch + 1,
