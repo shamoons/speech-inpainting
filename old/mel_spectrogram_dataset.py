@@ -8,13 +8,13 @@ from torchaudio.datasets import SPEECHCOMMANDS
 class MelSpectrogramDataset(torch.utils.data.Dataset):
     def __init__(self, n_mels=80, subset='training'):
         self.dataset = SPEECHCOMMANDS('./data', download=True, subset=subset)
-        self.mel_spectrogram = MelSpectrogram(n_mels=n_mels)
+        self.mel_spectrogram = MelSpectrogram(n_mels=n_mels, n_fft=256, normalized=True)
         self.n_mels = n_mels
 
     def __getitem__(self, index):
         waveform, sample_rate, label, _, _ = self.dataset[index]
         mel_specgram = self.mel_spectrogram(waveform)
-        return mel_specgram.squeeze(0), label, waveform.shape[-1]  # return waveform length
+        return mel_specgram.squeeze(0), label, waveform.shape[-1]
 
     def __len__(self):
         return len(self.dataset)
@@ -27,7 +27,7 @@ class MelSpectrogramDataset(torch.utils.data.Dataset):
         mel_specgrams, labels, waveform_lengths = zip(*batch)
 
         max_length = max([specgram.size(0) for specgram in mel_specgrams])
-        max_width = self.n_mels  # Use n_mels as the target width
+        max_width = self.n_mels
 
         mel_specgrams = [pad_tensor(specgram, max_length, max_width) for specgram in mel_specgrams]
         mel_specgrams = torch.stack(mel_specgrams)
