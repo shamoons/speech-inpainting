@@ -68,7 +68,7 @@ def reconstruct_and_save(checkpoint_path, output_dir):
     bottleneck_dim = 128
 
     # Instantiate the TransformerAutoencoder
-    model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
+    model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=4,
                                    dim_feedforward=512, bottleneck_dim=bottleneck_dim).to(device)
 
     # Load the checkpoint
@@ -94,8 +94,8 @@ def reconstruct_and_save(checkpoint_path, output_dir):
         reconstructed_mel_specgram = outputs.squeeze().detach().cpu().numpy()
 
         #  Perform inverse log transformation of: log_mel_specgram = torch.log(mel_specgram + 1)
-        original_mel_specgram = np.exp(original_mel_specgram) - 1
-        reconstructed_mel_specgram = np.exp(reconstructed_mel_specgram) - 1
+        # original_mel_specgram = np.exp(original_mel_specgram) - 1
+        # reconstructed_mel_specgram = np.exp(reconstructed_mel_specgram) - 1
 
         # Calculate min, max, and average for input and output
         input_min, input_max, input_avg = original_mel_specgram.min().item(

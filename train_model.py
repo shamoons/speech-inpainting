@@ -34,7 +34,7 @@ def main():
 
     # Instantiate the TransformerAutoencoder with the bottleneck_dim parameter
     model = TransformerAutoencoder(d_model=d_model, nhead=4,
-                                   num_layers=2, dim_feedforward=512,
+                                   num_layers=4, dim_feedforward=512,
                                    bottleneck_dim=bottleneck_dim, dropout=0.5).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     # Define the learning rate scheduler
