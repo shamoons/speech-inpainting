@@ -27,6 +27,6 @@ def pad_collate(batch):
     return torch.stack(waveforms, dim=0)
 
 
-def get_dataloader(root_dir, batch_size, transform=None):
-    dataset = SpeechCommandsDataset(root_dir, transform)
+def get_dataloader(root_dir, batch_size, transform=None, subset='training'):
+    dataset = SpeechCommandsDataset(root_dir, transform, subset=subset)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, collate_fn=pad_collate)
