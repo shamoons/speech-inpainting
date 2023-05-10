@@ -1,5 +1,6 @@
 # arg_parser.py
 import argparse
+import ast
 
 
 def parse_args():
@@ -12,6 +13,6 @@ def parse_args():
     parser.add_argument('--log_interval', type=int, default=100,
                         help='Interval (in batches) at which to log training statistics')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size for training')
-    parser.add_argument('--use_cuda', type=bool, default=False, help='Use CUDA if available')
-    parser.add_argument('--use_mps', type=bool, default=False, help='Use MPS if available')
+    parser.add_argument('--use_cuda', type=ast.literal_eval, default=False, help='Use CUDA if available')
+    parser.add_argument('--use_mps', type=ast.literal_eval, default=False, help='Use MPS if available')
     return parser.parse_args()

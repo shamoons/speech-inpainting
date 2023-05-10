@@ -1,140 +1,71 @@
 # reconstruct.py
-import os
 import torch
 import matplotlib.pyplot as plt
-from transformer_autoencoder import TransformerAutoencoder
-from mel_spectrogram_dataset import MelSpectrogramDataset
-from torch.utils.data import DataLoader
-import argparse
 import torchaudio
-import numpy as np
-from torchaudio.transforms import InverseMelScale, GriffinLim
+from data_loader import get_dataloader
+from model import TransformerAutoencoder
+from utils import melspectrogram_transform, load_checkpoint, get_arg_parser
 
 
-# Define the parameters for the InverseMelScale and GriffinLim transforms
-n_mels = 128
-n_fft = 2048
-n_iter = 128
-win_length = 1200
-hop_length = 480
-n_stft = n_fft // 2 + 1
-sample_rate = 16000
+def main():
+    args = get_arg_parser().parse_args()
 
-
-def plot_spectrogram(spec, output_file, waveform_length):
-    fig, ax = plt.subplots()
-
-    # Calculate the time for each frame
-    time_per_frame = hop_length / sample_rate
-    actual_frames = waveform_length // hop_length + 1
-
-    # Slice the spectrogram to keep only the frames corresponding to the specified length
-    spec = spec[:, :actual_frames]
-
-    img = plt.imshow(spec, aspect='auto', origin='lower', cmap='inferno')
-    plt.colorbar(img, ax=ax)
-
-    # Set the x-axis ticks and labels for every 0.2 seconds
-    tick_interval = 0.2
-    num_ticks = int(actual_frames * time_per_frame / tick_interval)
-    x_ticks = np.arange(0, actual_frames, actual_frames / num_ticks)
-    x_tick_labels = [f"{i * tick_interval:.1f}" for i in range(len(x_ticks))]
-
-    # Set the x-axis ticks and labels
-    plt.xticks(x_ticks, x_tick_labels)
-    plt.xlabel('Time (s)')
-    plt.ylabel('Frequency')
-    plt.tight_layout()
-    plt.savefig(output_file)
-    plt.close()
-
-
-def reconstruct_and_save(checkpoint_path, output_dir):
-    if torch.backends.mps.is_available():
+    if args.use_mps and torch.backends.mps.is_available():
         device = torch.device('mps')
-    elif torch.cuda.is_available():
+    elif args.use_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
 
-    d_model = n_mels
-    # Define the bottleneck dimension
-    bottleneck_dim = 128
+    transform = melspectrogram_transform(args.n_mels)
+    dataloader = get_dataloader(args.data_path, args.batch_size, transform)
 
-    # Instantiate the TransformerAutoencoder
-    model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
-                                   dim_feedforward=512, max_length=1600, bottleneck_dim=bottleneck_dim).to(device)
+    model = TransformerAutoencoder(d_model=args.n_mels, nhead=2, num_layers=2,
+                                   dim_feedforward=512, bottleneck_size=128).to(device)
 
-    # Load the checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    if args.checkpoint_path:
+        _, _ = load_checkpoint(args.checkpoint_path, model)
 
-    # Instantiate the MelSpectrogramDataset
-    mel_train_dataset = MelSpectrogramDataset(n_mels=d_model, subset='validation')
-    train_loader = DataLoader(mel_train_dataset, batch_size=1,
-                              shuffle=True, collate_fn=mel_train_dataset.collate_fn)
+    model.eval()
 
-    for i, (mel_specgrams, labels, waveform_lengths) in enumerate(train_loader):
-        mel_specgrams = mel_specgrams.transpose(0, 1).to(device)
-        # Receive both the final output and the bottleneck output from the model
-        outputs, bottleneck_output = model(mel_specgrams)
+    with torch.no_grad():
+        for batch_idx, mel_specgrams in enumerate(dataloader):
+            mel_specgrams = mel_specgrams.transpose(1, 2).to(device)
+            output, _ = model(mel_specgrams)
+            break
 
-        # Save the spectrogram of the original audio and the reconstructed audio
-        original_spec_path = os.path.join(output_dir, f"original_{labels[0]}_spec.png")
-        reconstructed_spec_path = os.path.join(output_dir, f"reconstructed_{labels[0]}_spec.png")
+    # Convert tensors to numpy arrays for plotting
+    original = mel_specgrams[0].cpu().numpy()
+    reconstructed = output[0].cpu().numpy()
 
-        # Squeeze the tensors, detach them, and move them to the CPU
-        original_mel_specgram = mel_specgrams.squeeze().detach().cpu().numpy()
-        reconstructed_mel_specgram = outputs.squeeze().detach().cpu().numpy()
+    # Plot original and reconstructed melspectrograms
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.imshow(original, aspect='auto', origin='lower')
+    plt.title('Original')
+    plt.subplot(1, 2, 2)
+    plt.imshow(reconstructed, aspect='auto', origin='lower')
+    plt.title('Reconstructed')
+    plt.tight_layout()
+    plt.savefig('reconstruction.png')
 
-        # Plot and save the spectrograms
-        plot_spectrogram(original_mel_specgram, original_spec_path, waveform_lengths[0])
-        plot_spectrogram(reconstructed_mel_specgram, reconstructed_spec_path,
-                         waveform_lengths[0])
+    # Inverse transformations to restore audio
+    inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
+    griffin_lim = torchaudio.transforms.GriffinLim(n_fft=400, hop_length=160, win_length=400, power=2).to(device)
 
-        # Instantiate the InverseMelScale transform
-        inverse_mel_scale = InverseMelScale(n_stft=n_stft, n_mels=n_mels, sample_rate=sample_rate)
+    # Convert numpy arrays back to tensors, add an extra dimension, and transpose the last two dimensions
+    original_tensor = torch.tensor(original)[None, ...].transpose(-1, -2)
+    reconstructed_tensor = torch.tensor(reconstructed)[None, ...].transpose(-1, -2)
 
-        # Convert the numpy array to a PyTorch tensor and add a batch dimension
-        original_mel_specgram_tensor = torch.from_numpy(original_mel_specgram).unsqueeze(0)
-        reconstructed_mel_specgram_tensor = torch.from_numpy(reconstructed_mel_specgram).unsqueeze(0)
+    original_audio = griffin_lim(inv_mel_scale(original_tensor))
+    reconstructed_audio = griffin_lim(inv_mel_scale(reconstructed_tensor))
 
-        # Convert the Mel spectrogram to a linear-frequency spectrogram
-        original_linear_specgram = inverse_mel_scale(original_mel_specgram_tensor)
-        reconstructed_linear_specgram = inverse_mel_scale(reconstructed_mel_specgram_tensor)
-
-        # Instantiate the Griffin-Lim transform
-        griffin_lim = GriffinLim(n_fft=n_fft, win_length=win_length, hop_length=hop_length,
-                                 n_iter=n_iter)
-
-        # Use the Griffin-Lim algorithm to reconstruct the waveform from the linear-frequency spectrogram
-        original_waveform = griffin_lim(original_linear_specgram)
-        reconstructed_waveform = griffin_lim(reconstructed_linear_specgram)
-
-        # Save the waveform as a .wav file
-        original_audio_path = os.path.join(output_dir, f"original_{labels[0]}_audio.wav")
-        reconstructed_audio_path = os.path.join(output_dir, f"reconstructed_{labels[0]}_audio.wav")
-
-        torchaudio.save(original_audio_path, original_waveform, sample_rate)
-        torchaudio.save(reconstructed_audio_path, reconstructed_waveform, sample_rate)
-
-        break
-# Create the argument parser
+    # Save original and reconstructed audio
+    torchaudio.save("original_audio.wav", original_audio.cpu(), sample_rate=16000)
+    torchaudio.save("reconstructed_audio.wav", reconstructed_audio.cpu(), sample_rate=16000)
 
 
-parser = argparse.ArgumentParser(description='Reconstruct audio using a trained model.')
-
-# Add the arguments
-
-parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
-parser.add_argument('--output-dir', type=str, help='Directory to save the reconstructed file')
-
-# Parse the command-line arguments
-
-args = parser.parse_args()
-
-# Call the reconstruct_and_save function with the provided arguments
-
-reconstruct_and_save(args.checkpoint, args.output_dir)
+if __name__ == "__main__":
+    main()

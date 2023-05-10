@@ -1,7 +1,6 @@
 # train_model.py
 import os
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from transformer_autoencoder import TransformerAutoencoder
@@ -34,11 +33,12 @@ def main():
     bottleneck_dim = 128
 
     # Instantiate the TransformerAutoencoder with the bottleneck_dim parameter
-    model = TransformerAutoencoder(d_model=d_model, nhead=4, num_layers=2,
-                                   dim_feedforward=512, max_length=1600,
+    model = TransformerAutoencoder(d_model=d_model, nhead=4,
+                                   num_layers=4, dim_feedforward=512,
                                    bottleneck_dim=bottleneck_dim, dropout=0.5).to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    criterion = nn.MSELoss()
+    # Define the learning rate scheduler
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', verbose=True, patience=5)
 
     start_epoch = 0
     if args.checkpoint and os.path.isfile(args.checkpoint):
@@ -49,8 +49,11 @@ def main():
 
     num_epochs = args.epochs + start_epoch
     for epoch in range(start_epoch, num_epochs):
-        avg_loss = train_epoch(model, train_loader, optimizer, criterion, device, args.log_interval)
+        avg_loss = train_epoch(model, train_loader, optimizer, device)
         print(f'Epoch [{epoch + 1}/{num_epochs}], Average Loss: {avg_loss:.4f}')
+
+        # Step the learning rate scheduler
+        scheduler.step(avg_loss)
 
         # Save checkpoint
         torch.save({
