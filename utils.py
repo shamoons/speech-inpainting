@@ -12,10 +12,11 @@ def save_checkpoint(state, filepath):
     torch.save(state, filepath)
 
 
-def load_checkpoint(filepath, model, optimizer):
+def load_checkpoint(filepath, model, optimizer=None):
     checkpoint = torch.load(filepath)
     model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     return checkpoint['epoch'], checkpoint['loss']
 
 
@@ -26,8 +27,7 @@ def get_arg_parser():
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
     parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for the optimizer')
     parser.add_argument('--n_mels', type=int, default=128, help='Number of mel frequency bands in melspectrogram')
-    parser.add_argument('--checkpoint_path', type=str, default='./checkpoints', help='Path to save/load checkpoint')
-    parser.add_argument('--load_checkpoint', action='store_true', help='Load checkpoint and resume training')
+    parser.add_argument('--checkpoint_path', type=str, default='', help='Path to the checkpoint file')
     parser.add_argument('--use_cuda', type=bool, default=False, help='Use CUDA if available')
     parser.add_argument('--use_mps', type=bool, default=False, help='Use MPS if available')
     return parser
