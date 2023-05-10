@@ -1,29 +1,64 @@
 # model.py
 import torch
 import torch.nn as nn
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+import math
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck_size):
-        super().__init__()
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck_size, dropout=0.5):
+        super(TransformerAutoencoder, self).__init__()
 
-        # Encoder
-        self.linear_in = nn.Linear(d_model, dim_feedforward)
-        self.pos_encoder = PositionalEncoding(dim_feedforward)
-        encoder_layers = TransformerEncoderLayer(dim_feedforward, nhead, dim_feedforward)
-        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers)
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer=nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout),
+            num_layers=num_layers
+        )
 
-        # Bottleneck
-        self.linear_bottleneck = nn.Linear(dim_feedforward, bottleneck_size)
+        self.decoder = nn.TransformerDecoder(
+            decoder_layer=nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout),
+            num_layers=num_layers
+        )
 
-        # Decoder
-        self.linear_out = nn.Linear(bottleneck_size, d_model)
+        self.bottleneck = nn.Linear(d_model, bottleneck_size)
+        self.bottleneck_expansion = nn.Linear(bottleneck_size, d_model)
+        self.dropout = nn.Dropout(dropout)
+        self.d_model = d_model
+        self.relu = nn.ReLU()
 
     def forward(self, src):
-        src = self.linear_in(src)
-        src = self.pos_encoder(src)
-        src = self.transformer_encoder(src)
-        src = self.linear_bottleneck(src)
-        src = self.linear_out(src)
-        return src
+        num_time_frames = src.size(1)
+
+        # Generate sinusoidal position embeddings
+        position_embeddings = self._get_sinusoidal_position_embeddings(num_time_frames, self.d_model).to(src.device)
+
+        # Add position embeddings to input, shape: (batch_size, num_time_frames, d_model)
+        src = src + position_embeddings
+
+        # Pass the input through the encoder, shape: (batch_size, num_time_frames, d_model)
+        encoded = self.encoder(src)
+
+        # Pass the encoded output through the bottleneck layer, shape: (batch_size, num_time_frames, bottleneck_size)
+        bottleneck_output = self.bottleneck(encoded)
+        bottleneck_output = self.dropout(bottleneck_output)
+
+        # Expand the bottleneck output back to the original dimension, shape: (batch_size, num_time_frames, d_model)
+        expanded = self.bottleneck_expansion(bottleneck_output)
+        expanded = self.dropout(expanded)
+
+        # Pass the expanded output through the decoder, shape: (batch_size, num_time_frames, d_model)
+        decoded = self.decoder(expanded, encoded)
+
+        # Apply the ReLU activation to the decoded output
+        decoded = self.relu(decoded)
+
+        return decoded, bottleneck_output
+
+    def _get_sinusoidal_position_embeddings(self, num_positions, d_model):
+        position_embeddings = torch.zeros(num_positions, d_model)
+        positions = torch.arange(0, num_positions, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
+
+        position_embeddings[:, 0::2] = torch.sin(positions * div_term)
+        position_embeddings[:, 1::2] = torch.cos(positions * div_term)
+        position_embeddings = position_embeddings.unsqueeze(0)
+
+        return position_embeddings
