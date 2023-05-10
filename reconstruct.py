@@ -1,6 +1,7 @@
 # reconstruct.py
 import torch
 import matplotlib.pyplot as plt
+import torchaudio
 from data_loader import get_dataloader
 from model import TransformerAutoencoder
 from utils import melspectrogram_transform, load_checkpoint, get_arg_parser
@@ -49,6 +50,17 @@ def main():
     plt.title('Reconstructed')
     plt.tight_layout()
     plt.savefig('reconstruction.png')
+
+    # Inverse transformations to restore audio
+    inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
+    griffin_lim = torchaudio.transforms.GriffinLim(n_fft=400, hop_length=160, win_length=400, power=2).to(device)
+
+    original_audio = griffin_lim(inv_mel_scale(original))
+    reconstructed_audio = griffin_lim(inv_mel_scale(reconstructed))
+
+    # Save original and reconstructed audio
+    torchaudio.save("original_audio.wav", original_audio, sample_rate=16000)
+    torchaudio.save("reconstructed_audio.wav", reconstructed_audio, sample_rate=16000)
 
 
 if __name__ == "__main__":
