@@ -5,6 +5,7 @@ from data_loader import get_dataloader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from model import TransformerAutoencoder
 from tqdm import tqdm
+import wandb
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
 
 
@@ -53,6 +54,19 @@ def main():
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
+
+    wandb.init(
+        # set the wandb project where this run will be logged
+        project="speech-inpainting",
+
+        # track hyperparameters and run metadata
+        config={
+            "initial_learning_rate": args.initial_lr,
+            "batch_size": args.batch_size,
+            "epochs": args.epochs,
+            "n_mels": args.n_mels,
+        }
+    )
 
     transform = melspectrogram_transform(args.n_mels)
     train_dataloader = get_dataloader(args.data_path, args.batch_size, transform)
