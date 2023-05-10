@@ -55,7 +55,7 @@ def main():
 
     print(f"Using device: {device}")
 
-    wandb.init(
+    wandb_run = wandb.init(
         # set the wandb project where this run will be logged
         project="speech-inpainting",
 
@@ -87,6 +87,7 @@ def main():
         val_loss = validate_epoch(model, val_dataloader, criterion, device)  # Add this line
         print(f"Epoch {epoch + 1}/{args.epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}")
         scheduler.step(val_loss)
+        wandb_run.log({"train_loss": train_loss, "val_loss": val_loss})
 
         save_checkpoint({
             'epoch': epoch + 1,
