@@ -15,11 +15,11 @@ class SpeechCommandsDataset(SPEECHCOMMANDS):
 
         if self.transform:
             waveform = self.transform(waveform)
-            waveform = torch.squeeze(waveform, dim=0)
+            waveform = torch.squeeze(waveform, dim=0)  # shape: (n_mels, T)
 
         # Add the EOS token to the waveform
-        EOS_token_tensor = torch.full_like(waveform[..., :1], self.EOS_token)
-        waveform = torch.cat([waveform, EOS_token_tensor], dim=-1)
+        EOS_token_tensor = torch.full_like(waveform[..., :1], self.EOS_token)  # shape: (n_mels, 1)
+        waveform = torch.cat([waveform, EOS_token_tensor], dim=-1)  # shape: (n_mels, T+1)
 
         return waveform
 

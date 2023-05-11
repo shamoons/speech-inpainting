@@ -49,6 +49,11 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     return epoch_loss / len(dataloader)
 
 
+def msle_loss(y_pred, y_true):
+    return torch.nn.MSELoss()(torch.log1p(torch.relu(y_pred)), torch.log1p(torch.relu(y_true)))
+    # return torch.nn.MSELoss()(y_pred, y_true)
+
+
 def main():
     args = get_arg_parser().parse_args()
 
@@ -82,7 +87,7 @@ def main():
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
-    criterion = torch.nn.MSELoss()
+    criterion = msle_loss
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)  # Change this line
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.9, verbose=True)  # Add this line
 
