@@ -5,7 +5,7 @@ import math
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck_size, dropout=0.5):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck_size, dropout=0.0):
         super(TransformerAutoencoder, self).__init__()
 
         self.encoder = nn.TransformerEncoder(

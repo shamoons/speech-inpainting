@@ -8,6 +8,8 @@ from tqdm import tqdm
 import wandb
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
 
+torch.manual_seed(0)
+
 
 def validate_epoch(model, dataloader, criterion, device):
     model.eval()
@@ -38,6 +40,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     for batch_idx, mel_specgrams in progress_bar:
         # Transpose to match model input shape: (batch_size, T, n_mels)
         mel_specgrams = mel_specgrams.transpose(1, 2).to(device)
+
         optimizer.zero_grad()
         output, _ = model(mel_specgrams)  # Output shape: (batch_size, T, n_mels)
         loss = criterion(output, mel_specgrams)
@@ -47,14 +50,14 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
 
         # Calculate average for each time step for original and reconstructed
-        original_avg_per_timestep = mel_specgrams[0].mean(axis=1)
-        reconstructed_avg_per_timestep = output[0].mean(axis=1)
+        # original_avg_per_timestep = mel_specgrams[0].mean(axis=1)
+        # reconstructed_avg_per_timestep = output[0].mean(axis=1)
 
         # Print averages
-        print("Average value for each time step in the original tensor:")
-        print(mel_specgrams.size(), original_avg_per_timestep)
-        print("Average value for each time step in the reconstructed tensor:")
-        print(output.size(), reconstructed_avg_per_timestep)
+        # print("Average value for each time step in the original tensor:")
+        # print(mel_specgrams.size(), original_avg_per_timestep)
+        # print("Average value for each time step in the reconstructed tensor:")
+        # print(output.size(), reconstructed_avg_per_timestep)
 
     return epoch_loss / len(dataloader)
 
@@ -80,7 +83,7 @@ def main():
     wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
 
     transform = melspectrogram_transform(args.n_mels)
-    train_dataloader = get_dataloader(args.data_path, args.batch_size, transform, lite=args.lite, add_eos=True)
+    train_dataloader = get_dataloader(args.data_path, args.batch_size, transform, lite=args.lite, add_eos=False)
     val_dataloader = get_dataloader(args.data_path, args.batch_size, transform,
                                     subset='validation', lite=args.lite, add_eos=True)
 

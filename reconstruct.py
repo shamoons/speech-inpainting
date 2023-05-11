@@ -27,34 +27,38 @@ def main():
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
 
+    model.eval()
     if args.checkpoint_path:
         print(f"Loading checkpoint from {args.checkpoint_path}")
         _, _ = load_checkpoint(args.checkpoint_path, model)
 
-    model.eval()
-
     with torch.no_grad():
         for batch_idx, mel_specgrams in enumerate(dataloader):  # shape: (batch_size, n_mels, T)
             mel_specgrams = mel_specgrams.transpose(1, 2).to(device)  # shape: (batch_size, T, n_mels)
+            # mel_specgrams = torch.randn(mel_specgrams.size()).to(device)
             output, _ = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
+
+            # print("mel_specgrams", mel_specgrams[0].size(), mel_specgrams[0])
+            # print("output", output[0].size(), output[0])
+            # quit()
             break
 
     original = mel_specgrams[0].cpu().numpy()
     reconstructed = output[0].cpu().numpy()
 
-    # Calculate average for each time step for original and reconstructed
-    original_avg_per_timestep = original.mean(axis=1)
-    reconstructed_avg_per_timestep = reconstructed.mean(axis=1)
+    # # Calculate average for each time step for original and reconstructed
+    # original_avg_per_timestep = original.mean(axis=1)
+    # reconstructed_avg_per_timestep = reconstructed.mean(axis=1)
 
-    # Print averages
-    print("Average value for each time step in the original tensor:")
-    print(original.shape, original_avg_per_timestep)
-    print("Average value for each time step in the reconstructed tensor:")
-    print(reconstructed.shape, reconstructed_avg_per_timestep)
+    # # Print averages
+    # print("Average value for each time step in the original tensor:")
+    # print(original.shape, original_avg_per_timestep)
+    # print("Average value for each time step in the reconstructed tensor:")
+    # print(reconstructed.shape, reconstructed_avg_per_timestep)
 
-    print("Original", original)
-    print("Reconstructed", reconstructed)
-    quit()
+    # print("Original", original)
+    # print("Reconstructed", reconstructed)
+    # quit()
 
     # Find the index of the EOS token in the original tensor
     EOS_token = torch.tensor(-1.0)  # Assuming this is your EOS token
@@ -66,17 +70,17 @@ def main():
         original = mel_specgrams[0].cpu().numpy()
         reconstructed = output[0].cpu().numpy()
 
-    print(f"Original shape: {original.shape}")
-    print(f"Reconstructed shape: {reconstructed.shape}")
-    # Calculate average for each time step for original and reconstructed
-    original_avg_per_timestep = mel_specgrams.mean(axis=1)
-    reconstructed_avg_per_timestep = output.mean(axis=1)
+    # print(f"Original shape: {original.shape}")
+    # print(f"Reconstructed shape: {reconstructed.shape}")
+    # # Calculate average for each time step for original and reconstructed
+    # original_avg_per_timestep = mel_specgrams.mean(axis=1)
+    # reconstructed_avg_per_timestep = output.mean(axis=1)
 
-    # Print averages
-    print("Average value for each time step in the original tensor:")
-    print(original.shape, original_avg_per_timestep)
-    print("Average value for each time step in the reconstructed tensor:")
-    print(reconstructed.shape, reconstructed_avg_per_timestep)
+    # # Print averages
+    # print("Average value for each time step in the original tensor:")
+    # print(original.shape, original_avg_per_timestep)
+    # print("Average value for each time step in the reconstructed tensor:")
+    # print(reconstructed.shape, reconstructed_avg_per_timestep)
 
     # Plot original and reconstructed melspectrograms
     plt.figure(figsize=(10, 4))
