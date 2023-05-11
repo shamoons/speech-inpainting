@@ -8,6 +8,7 @@ from utils import melspectrogram_transform, load_checkpoint, get_arg_parser
 
 
 def main():
+    torch.manual_seed(0)
     args = get_arg_parser().parse_args()
 
     if args.use_mps and torch.backends.mps.is_available():
@@ -18,14 +19,16 @@ def main():
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
+    torch.device(device)
 
     transform = melspectrogram_transform(args.n_mels)
-    dataloader = get_dataloader(args.data_path, 100, transform)
+    dataloader = get_dataloader(args.data_path, 50, transform, add_eos=False)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
 
     if args.checkpoint_path:
+        print(f"Loading checkpoint from {args.checkpoint_path}")
         _, _ = load_checkpoint(args.checkpoint_path, model)
 
     model.eval()
@@ -36,17 +39,44 @@ def main():
             output, _ = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
             break
 
-    # Find the index of the EOS token in the original tensor
-    EOS_token = -1.0  # Assuming this is your EOS token
-    eos_idx = (mel_specgrams[0] == EOS_token).nonzero(as_tuple=True)[0][0]
+    original = mel_specgrams[0].cpu().numpy()
+    reconstructed = output[0].cpu().numpy()
 
-    # Slice the tensors to remove the EOS token and following timesteps
-    print(f"Original shape: {mel_specgrams.shape}")
-    original = mel_specgrams[0, :eos_idx, :].cpu().numpy()  # shape: (Te, n_mels) where Te is T truncated by eos_idx
-    # original = mel_specgrams[0].cpu().numpy()  # shape: (Te, n_mels) where Te is T truncated by eos_idx
-    print(f"Stripped shape: {original.shape}")
-    reconstructed = output[0, :eos_idx, :].cpu().numpy()  # shape: (Te, n_mels) where Te is T truncated by eos_idx
-    # reconstructed = output[0].cpu().numpy()  # shape: (Te, n_mels) where Te is T truncated by eos_idx
+    # Calculate average for each time step for original and reconstructed
+    original_avg_per_timestep = original.mean(axis=1)
+    reconstructed_avg_per_timestep = reconstructed.mean(axis=1)
+
+    # Print averages
+    print("Average value for each time step in the original tensor:")
+    print(original.shape, original_avg_per_timestep)
+    print("Average value for each time step in the reconstructed tensor:")
+    print(reconstructed.shape, reconstructed_avg_per_timestep)
+
+    print("Original", original)
+    print("Reconstructed", reconstructed)
+    quit()
+
+    # Find the index of the EOS token in the original tensor
+    EOS_token = torch.tensor(-1.0)  # Assuming this is your EOS token
+    eos_indices = torch.isclose(mel_specgrams[0], EOS_token, atol=1e-6).all(dim=1).nonzero(as_tuple=True)[0]
+    if eos_indices.size(0) > 0 and False:
+        original = mel_specgrams[0, :eos_indices[0], :].cpu().numpy()
+        reconstructed = output[0, :eos_indices[0], :].cpu().numpy()
+    else:
+        original = mel_specgrams[0].cpu().numpy()
+        reconstructed = output[0].cpu().numpy()
+
+    print(f"Original shape: {original.shape}")
+    print(f"Reconstructed shape: {reconstructed.shape}")
+    # Calculate average for each time step for original and reconstructed
+    original_avg_per_timestep = mel_specgrams.mean(axis=1)
+    reconstructed_avg_per_timestep = output.mean(axis=1)
+
+    # Print averages
+    print("Average value for each time step in the original tensor:")
+    print(original.shape, original_avg_per_timestep)
+    print("Average value for each time step in the reconstructed tensor:")
+    print(reconstructed.shape, reconstructed_avg_per_timestep)
 
     # Plot original and reconstructed melspectrograms
     plt.figure(figsize=(10, 4))
@@ -61,7 +91,8 @@ def main():
 
     # Inverse transformations to restore audio
     inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
-    griffin_lim = torchaudio.transforms.GriffinLim(n_fft=400, hop_length=160, win_length=400, power=2).to(device)
+    griffin_lim = torchaudio.transforms.GriffinLim(
+        n_fft=400, hop_length=160, win_length=400, power=2, n_iter=64).to(device)
 
     original_tensor = torch.tensor(original)[None, ...].transpose(-1, -2)  # shape: (1, n_mels, T)
     reconstructed_tensor = torch.tensor(reconstructed)[None, ...].transpose(-1, -2)  # shape: (1, n_mels, T)

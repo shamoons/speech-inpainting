@@ -46,13 +46,13 @@ class TransformerAutoencoder(nn.Module):
         expanded = self.dropout(expanded)
 
         # Pass the expanded output through the decoder, shape: (batch_size, num_time_frames, d_model)
-        if self.training:
+        if self.training or True:
             decoded = self.decoder(expanded, encoded)
         else:
             decoded = self._decode_token_by_token(expanded, encoded)
 
-        # Apply the ReLU activation to the decoded output
-        decoded = self.relu(decoded)
+        # # Apply the ReLU activation to the decoded output
+        # decoded = self.relu(decoded)
 
         return decoded, bottleneck_output
 
