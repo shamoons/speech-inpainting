@@ -22,7 +22,7 @@ def main():
     transform = melspectrogram_transform(args.n_mels)
     dataloader = get_dataloader(args.data_path, args.batch_size, transform)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, nhead=2, num_layers=2,
+    model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
 
     if args.checkpoint_path:

@@ -9,6 +9,12 @@ import wandb
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
 
 
+def log_weights(model):
+    for name, param in model.named_parameters():
+        wandb.log({f"{name}_mean": param.data.mean()})
+        wandb.log({f"{name}_stddev": param.data.std()})
+
+
 def validate_epoch(model, dataloader, criterion, device):
     model.eval()
     epoch_loss = 0.0
@@ -65,29 +71,33 @@ def main():
             "batch_size": args.batch_size,
             "epochs": args.epochs,
             "n_mels": args.n_mels,
+            "nhead": args.nhead,
+            "num_layers": args.num_layers,
         }
     )
 
     transform = melspectrogram_transform(args.n_mels)
-    train_dataloader = get_dataloader(args.data_path, args.batch_size, transform)
-    val_dataloader = get_dataloader(args.data_path, args.batch_size, transform, subset='validation')
+    train_dataloader = get_dataloader(args.data_path, args.batch_size, transform, lite=args.lite)
+    val_dataloader = get_dataloader(args.data_path, args.batch_size, transform, subset='validation', lite=args.lite)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, nhead=2, num_layers=2,
+    model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=512, bottleneck_size=128).to(device)
     criterion = torch.nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)  # Change this line
-    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.5)  # Add this line
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.9, verbose=True)  # Add this line
 
     start_epoch = 0
     if args.checkpoint_path:
         start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
 
-    for epoch in range(start_epoch, args.epochs):
+    total_epochs = start_epoch + args.epochs
+    for epoch in range(start_epoch, total_epochs):
         train_loss = train_epoch(model, train_dataloader, criterion, optimizer, device)
-        val_loss = validate_epoch(model, val_dataloader, criterion, device)  # Add this line
-        print(f"Epoch {epoch + 1}/{args.epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}")
+        val_loss = validate_epoch(model, val_dataloader, criterion, device)
+        print(f"Epoch {epoch + 1}/{total_epochs}, Train Loss: {train_loss}, Val Loss: {val_loss}")
         scheduler.step(val_loss)
         wandb_run.log({"train_loss": train_loss, "val_loss": val_loss})
+        # log_weights(model)
 
         save_checkpoint({
             'epoch': epoch + 1,
@@ -96,6 +106,7 @@ def main():
             'train_loss': train_loss,
             'val_loss': val_loss
         }, f"./checkpoint_{epoch + 1}.pt")
+    wandb.finish()
 
 
 if __name__ == "__main__":

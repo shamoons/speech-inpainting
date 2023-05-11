@@ -30,4 +30,7 @@ def get_arg_parser():
     parser.add_argument('--checkpoint_path', type=str, default='', help='Path to the checkpoint file')
     parser.add_argument('--use_cuda', type=bool, default=False, help='Use CUDA if available')
     parser.add_argument('--use_mps', type=bool, default=False, help='Use MPS if available')
+    parser.add_argument('--nhead', type=int, default=4, help='Number of attention heads')
+    parser.add_argument('--num_layers', type=int, default=4, help='Number of encoder/decoder layers')
+    parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
     return parser
