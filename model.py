@@ -5,13 +5,17 @@ import math
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, nhead, num_layers, dim_feedforward, dropout=0.0):
+    def __init__(self, d_model, nhead, num_layers, dim_feedforward, bottleneck=128, dropout=0.0):
         super(TransformerAutoencoder, self).__init__()
 
         self.encoder = nn.TransformerEncoder(
             encoder_layer=nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout),
             num_layers=num_layers,
         )
+        self.relu = nn.ReLU()
+
+        self.bottleneck = nn.Linear(d_model, bottleneck)
+        self.bottleneck_expansion = nn.Linear(bottleneck, d_model)
 
         self.decoder = nn.TransformerDecoder(
             decoder_layer=nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout),
@@ -20,23 +24,57 @@ class TransformerAutoencoder(nn.Module):
 
         self.d_model = d_model
 
-    def forward(self, src, tgt):
+    def forward(self, src, tgt=None):
         num_time_frames = src.size(1)
 
         # Generate sinusoidal position embeddings
         position_embeddings_src = self._get_sinusoidal_position_embeddings(num_time_frames, self.d_model).to(src.device)
-        position_embeddings_tgt = self._get_sinusoidal_position_embeddings(num_time_frames, self.d_model).to(tgt.device)
 
         # Add position embeddings to input
         src = src + position_embeddings_src
-        tgt = tgt + position_embeddings_tgt
+
+        src = src.transpose(0, 1)  # shape: (T, batch_size, n_mels)
 
         # Pass the input through the encoder
-        memory = self.encoder(src)
+        memory = self.encoder(src).transpose(0, 1)  # shape: (batch_size, T, n_mels)
+        memory = self.relu(memory)
 
-        # Pass the memory and the target through the decoder
-        output = self.decoder(tgt, memory)
+        # Pass the output of the encoder through the bottleneck
+        memory = self.bottleneck(memory)
+        memory = self.relu(memory)
 
+        memory = self.bottleneck_expansion(memory)
+        memory = self.relu(memory)
+        memory = memory.transpose(0, 1)  # shape: (T, batch_size, n_mels)
+
+        if tgt is not None:
+            # In training mode, we have the target sequence
+            position_embeddings_tgt = self._get_sinusoidal_position_embeddings(
+                num_time_frames, self.d_model).to(tgt.device)
+            tgt = tgt + position_embeddings_tgt
+
+            tgt = tgt.transpose(0, 1)  # shape: (T, batch_size, n_mels)
+            output = self.decoder(tgt, memory)
+        else:
+            # In inference mode, we generate the target sequence step by step
+            output = self._generate_sequence(memory, num_time_frames)
+
+        # Transpose output back to (batch_size, T, n_mels)
+        output = output.transpose(0, 1)
+
+        return output
+
+    def _generate_sequence(self, memory, max_length):
+        batch_size = memory.size(1)
+        # Initialize output with a tensor filled with zeros
+        output = torch.zeros((1, batch_size, self.d_model), device=memory.device)
+        for _ in range(max_length):
+            output_step = self.decoder(output, memory)
+            output = torch.cat((output, output_step[-1:, :, :]), dim=0)
+        # Remove the first timestep from the output
+        output = output[1:]
+        # Transpose output back to (batch_size, T, n_mels)
+        output = output.transpose(0, 1)
         return output
 
     def _get_sinusoidal_position_embeddings(self, num_positions, d_model):

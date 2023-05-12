@@ -32,7 +32,7 @@ def pad_collate(batch):
     max_len = max([item.shape[-1] for item in batch])
     waveforms = [torch.cat([item, item.new_zeros(item.shape[:-1] + (max_len - item.shape[-1],))], dim=-1)
                  for item in batch]
-    return torch.stack(waveforms, dim=0)
+    return torch.stack(waveforms, dim=0).transpose(1, 2)  # shape: (batch_size, T, n_mels)
 
 
 def get_dataloader(root_dir, batch_size, transform=None, subset='training', lite=None, add_eos=False):

@@ -20,9 +20,9 @@ def validate_epoch(model, dataloader, criterion, device):
 
     with torch.no_grad():
         for batch_idx, mel_specgrams in progress_bar:
-            # Transpose to match model input shape: (batch_size, T, n_mels)
-            mel_specgrams = mel_specgrams.transpose(1, 2).to(device)
-            output, _ = model(mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+            # mel_specgrams shape: (batch_size, T, n_mels)
+            mel_specgrams = mel_specgrams.to(device)
+            output = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
             loss = criterion(output, mel_specgrams)
             epoch_loss += loss.item()
             progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
@@ -38,31 +38,17 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Train', leave=False)
 
     for batch_idx, mel_specgrams in progress_bar:
-        # Transpose to match model input shape: (batch_size, T, n_mels)
-        mel_specgrams = mel_specgrams.transpose(1, 2).to(device)
+        # mel_specgrams shape: (batch_size, T, n_mels)
+        mel_specgrams = mel_specgrams.to(device)
 
         optimizer.zero_grad()
-        output, _ = model(mel_specgrams)  # Output shape: (batch_size, T, n_mels)
-
-        # print("mel_specgrams", mel_specgrams[0].size(), mel_specgrams[0])
-        # print("output", output[0].size(), output[0])
-        # quit()
+        output = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
 
         loss = criterion(output, mel_specgrams)
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item()
         progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
-
-        # Calculate average for each time step for original and reconstructed
-        # original_avg_per_timestep = mel_specgrams[0].mean(axis=1)
-        # reconstructed_avg_per_timestep = output[0].mean(axis=1)
-
-        # Print averages
-        # print("Average value for each time step in the original tensor:")
-        # print(mel_specgrams.size(), original_avg_per_timestep)
-        # print("Average value for each time step in the reconstructed tensor:")
-        # print(output.size(), reconstructed_avg_per_timestep)
 
     return epoch_loss / len(dataloader)
 
