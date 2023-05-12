@@ -38,8 +38,8 @@ def main():
 
             output = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
 
-            # print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
-            # print("output", output.size(), output[0])
+            print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
+            print("output", output.size(), output[0])
             # quit()
             # break
 
