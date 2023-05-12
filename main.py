@@ -6,6 +6,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from model import TransformerAutoencoder
 from tqdm import tqdm
 import wandb
+import os
 from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
 
 torch.manual_seed(0)
@@ -53,8 +54,10 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     return epoch_loss / len(dataloader)
 
 
-def msle_loss(y_pred, y_true):
-    return torch.nn.MSELoss()(y_pred, y_true)
+def loss_fn(y_pred, y_true):
+    # Remove the first timestep from the predicted spectrograms as it's the bottleneck start
+    y_pred = y_pred[:, 1:, :]
+    return torch.nn.MSELoss()(torch.log1p(torch.nn.ReLU()(y_pred)), torch.log1p(torch.nn.ReLU()(y_true)))
 
 
 def main():
@@ -76,11 +79,11 @@ def main():
     transform = melspectrogram_transform(args.n_mels)
     train_dataloader = get_dataloader(args.data_path, args.batch_size, transform, lite=args.lite, add_eos=False)
     val_dataloader = get_dataloader(args.data_path, args.batch_size, transform,
-                                    subset='validation', lite=args.lite, add_eos=True)
+                                    subset='validation', lite=args.lite, add_eos=False)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=512).to(device)
-    criterion = msle_loss
+                                   dim_feedforward=args.dim_feedforward, dropout=args.dropout).to(device)
+    criterion = loss_fn
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.9, verbose=True)
 
@@ -107,7 +110,7 @@ def main():
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
             'val_loss': val_loss
-        }, f"./checkpoint_{epoch + 1}.pt")
+        }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
 
     # Finish the wandb run
     wandb.finish()

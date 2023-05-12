@@ -23,7 +23,7 @@ def load_checkpoint(filepath, model, optimizer=None):
 def get_arg_parser():
     parser = argparse.ArgumentParser(description='Transformer Autoencoder for SpeechCommands Dataset')
     parser.add_argument('--data_path', type=str, default='./data', help='Path to the dataset')
-    parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--batch_size', type=int, default=512, help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
     parser.add_argument('--initial_lr', type=float, default=0.001, help='Initial learning rate for the optimizer')
     parser.add_argument('--n_mels', type=int, default=128, help='Number of mel frequency bands in melspectrogram')
@@ -32,5 +32,7 @@ def get_arg_parser():
     parser.add_argument('--use_mps', action=argparse.BooleanOptionalAction, help='Use MPS if available')
     parser.add_argument('--nhead', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--num_layers', type=int, default=4, help='Number of encoder/decoder layers')
+    parser.add_argument('--dim_feedforward', type=int, default=512, help='Dimension of the feedforward network')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout probability')
     parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
     return parser

@@ -25,23 +25,23 @@ def main():
     dataloader = get_dataloader(args.data_path, 50, transform, add_eos=False)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=512, bottleneck_size=64).to(device)
+                                   dim_feedforward=args.dim_feedforward).to(device)
 
-    model.eval()
     if args.checkpoint_path:
         print(f"Loading checkpoint from {args.checkpoint_path}")
         _, _ = load_checkpoint(args.checkpoint_path, model)
 
+    model.eval()
     with torch.no_grad():
-        for batch_idx, mel_specgrams in enumerate(dataloader):  # shape: (batch_size, n_mels, T)
-            mel_specgrams = mel_specgrams.transpose(1, 2).to(device)  # shape: (batch_size, T, n_mels)
-            # mel_specgrams = torch.randn(mel_specgrams.size()).to(device)
-            output, _ = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
+        for _, mel_specgrams in enumerate(dataloader):
+            mel_specgrams = mel_specgrams.to(device)  # shape: (batch_size, T, n_mels)
 
-            print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
-            print("output", output.size(), output[0])
-            quit()
-            break
+            output = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
+
+            # print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
+            # print("output", output.size(), output[0])
+            # quit()
+            # break
 
     original = mel_specgrams[0].cpu().numpy()
     reconstructed = output[0].cpu().numpy()
@@ -83,6 +83,7 @@ def main():
     # print(reconstructed.shape, reconstructed_avg_per_timestep)
 
     # Plot original and reconstructed melspectrograms
+    print("Saving plot")
     plt.figure(figsize=(10, 4))
     plt.subplot(1, 2, 1)
     plt.imshow(original.T, aspect='auto', origin='lower')
