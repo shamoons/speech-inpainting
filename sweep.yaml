@@ -1,0 +1,30 @@
+program: main.py
+method: bayes
+metric:
+  name: val_loss
+  goal: minimize
+command:
+  - ${interpreter}
+  - ${program}
+  - ${args}
+  - --use_mps
+parameters:
+  initial_lr:
+    values: [0.1, 0.05, 0.01, 0.005]
+  n_mels:
+    distribution: categorical
+    values: [512, 1024]
+  nhead:
+    distribution: categorical
+    values: [1, 2, 4, 8]
+  num_layers:
+    values: [3, 4, 5, 6, 7]
+  epochs:
+    value: 20
+  dropout:
+    values: [0.3, 0.4]
+  batch_size:
+    value: 256
+  dim_feedforward:
+    distribution: categorical
+    values: [512, 1024, 2048]

@@ -8,7 +8,6 @@ from utils import melspectrogram_transform, load_checkpoint, get_arg_parser
 
 
 def main():
-    torch.manual_seed(0)
     args = get_arg_parser().parse_args()
 
     if args.use_mps and torch.backends.mps.is_available():
@@ -22,7 +21,7 @@ def main():
     device = torch.device(device)
 
     transform = melspectrogram_transform(args.n_mels)
-    dataloader = get_dataloader(args.data_path, 50, transform, add_eos=False)
+    dataloader = get_dataloader(args.data_path, 1, transform, add_eos=False)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
                                    dim_feedforward=args.dim_feedforward).to(device)
@@ -41,7 +40,7 @@ def main():
             print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
             print("output", output.size(), output[0])
             # quit()
-            # break
+            break
 
     original = mel_specgrams[0].cpu().numpy()
     reconstructed = output[0].cpu().numpy()

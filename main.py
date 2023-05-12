@@ -7,7 +7,7 @@ from model import TransformerAutoencoder
 from tqdm import tqdm
 import wandb
 import os
-from utils import melspectrogram_transform, save_checkpoint, load_checkpoint, get_arg_parser
+from utils import save_checkpoint, load_checkpoint, get_arg_parser
 
 torch.manual_seed(0)
 
@@ -23,7 +23,7 @@ def validate_epoch(model, dataloader, criterion, device):
         for batch_idx, mel_specgrams in progress_bar:
             # mel_specgrams shape: (batch_size, T, n_mels)
             mel_specgrams = mel_specgrams.to(device)
-            output = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+            output, _, _, _ = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
             loss = criterion(output, mel_specgrams)
             epoch_loss += loss.item()
             progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
@@ -43,7 +43,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         mel_specgrams = mel_specgrams.to(device)
 
         optimizer.zero_grad()
-        output = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+        output, _, _, _ = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
 
         loss = criterion(output, mel_specgrams)
         loss.backward()
@@ -55,8 +55,8 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
 
 
 def loss_fn(y_pred, y_true):
-    # Remove the first timestep from the predicted spectrograms as it's the bottleneck start
-    y_pred = y_pred[:, 1:, :]
+    # Remove the last timestep from the predicted spectrograms
+    y_pred = y_pred[:, :-1, :]
     return torch.nn.MSELoss()(torch.log1p(torch.nn.ReLU()(y_pred)), torch.log1p(torch.nn.ReLU()(y_true)))
 
 
@@ -76,13 +76,14 @@ def main():
     # Initialize wandb
     wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
 
-    transform = melspectrogram_transform(args.n_mels)
-    train_dataloader = get_dataloader(args.data_path, args.batch_size, transform, lite=args.lite, add_eos=False)
-    val_dataloader = get_dataloader(args.data_path, args.batch_size, transform,
-                                    subset='validation', lite=args.lite, add_eos=False)
+    train_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
+    val_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size,
+                                    subset='validation', lite=args.lite)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=args.dim_feedforward, dropout=args.dropout).to(device)
+    # model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
+    #                                dim_feedforward=args.dim_feedforward, dropout=args.dropout).to(device)
+    model = TransformerAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
+                                   nhead=args.nhead, max_len=1000).to(device)
     criterion = loss_fn
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.9, verbose=True)
