@@ -19,13 +19,13 @@ def main():
         device = torch.device('cpu')
 
     print(f"Using device: {device}")
-    torch.device(device)
+    device = torch.device(device)
 
     transform = melspectrogram_transform(args.n_mels)
     dataloader = get_dataloader(args.data_path, 50, transform, add_eos=False)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=512, bottleneck_size=128).to(device)
+                                   dim_feedforward=512, bottleneck_size=64).to(device)
 
     model.eval()
     if args.checkpoint_path:
@@ -38,9 +38,9 @@ def main():
             # mel_specgrams = torch.randn(mel_specgrams.size()).to(device)
             output, _ = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
 
-            # print("mel_specgrams", mel_specgrams[0].size(), mel_specgrams[0])
-            # print("output", output[0].size(), output[0])
-            # quit()
+            print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
+            print("output", output.size(), output[0])
+            quit()
             break
 
     original = mel_specgrams[0].cpu().numpy()
@@ -93,13 +93,15 @@ def main():
     plt.tight_layout()
     plt.savefig('./data/reconstructed/reconstruction.png')
 
+    quit()
+
     # Inverse transformations to restore audio
     inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
     griffin_lim = torchaudio.transforms.GriffinLim(
         n_fft=400, hop_length=160, win_length=400, power=2, n_iter=64).to(device)
 
-    original_tensor = torch.tensor(original)[None, ...].transpose(-1, -2)  # shape: (1, n_mels, T)
-    reconstructed_tensor = torch.tensor(reconstructed)[None, ...].transpose(-1, -2)  # shape: (1, n_mels, T)
+    original_tensor = torch.tensor(original)[None, ...].transpose(-1, -2).to(device)  # shape: (1, n_mels, T)
+    reconstructed_tensor = torch.tensor(reconstructed)[None, ...].transpose(-1, -2).to(device)  # shape: (1, n_mels, T)
 
     original_audio = griffin_lim(inv_mel_scale(original_tensor))  # shape: (1, T')
     reconstructed_audio = griffin_lim(inv_mel_scale(reconstructed_tensor))  # shape: (1, T')

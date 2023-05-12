@@ -43,6 +43,11 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
 
         optimizer.zero_grad()
         output, _ = model(mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+
+        # print("mel_specgrams", mel_specgrams[0].size(), mel_specgrams[0])
+        # print("output", output[0].size(), output[0])
+        # quit()
+
         loss = criterion(output, mel_specgrams)
         loss.backward()
         optimizer.step()
@@ -77,7 +82,7 @@ def main():
         device = "cuda"
 
     print(f"Using device: {device}")
-    torch.device(device)
+    device = torch.device(device)
 
     # Initialize wandb
     wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
@@ -88,7 +93,7 @@ def main():
                                     subset='validation', lite=args.lite, add_eos=True)
 
     model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=512, bottleneck_size=128).to(device)
+                                   dim_feedforward=512).to(device)
     criterion = msle_loss
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr)
     scheduler = ReduceLROnPlateau(optimizer, 'min', patience=5, factor=0.9, verbose=True)
