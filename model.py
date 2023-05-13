@@ -38,6 +38,8 @@ class TransformerAutoencoder(nn.Module):
         self.fc_out = nn.Linear(d_model, d_model)
         self.pos_encoder = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
         self.pos_decoder = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, src, trg):
         # src: [batch_size, src_len, d_model]
@@ -48,18 +50,50 @@ class TransformerAutoencoder(nn.Module):
         sos_tensor = self.sos_embedding.repeat(1, src.size(1), 1).to(src.device)  # [1, batch_size, d_model]
         eos_tensor = self.eos_embedding.repeat(1, src.size(1), 1).to(src.device)  # [1, batch_size, d_model]
 
+        # src = torch.log1p(src)  # [src_len, batch_size, d_model]
+        # trg = torch.log1p(trg)  # [trg_len, batch_size, d_model]
+        src_normalized = (src - src.mean()) / src.std()  # [src_len, batch_size, d_model]
+        trg_normalized = (trg - trg.mean()) / trg.std()  # [trg_len, batch_size, d_model]
+
+        src_scaled = torch.log1p(src_normalized)  # [src_len, batch_size, d_model]
+        trg_scaled = torch.log1p(trg_normalized)  # [trg_len, batch_size, d_model]
+
+        print(f"src_normalized.mean: {src_normalized.mean()}")
+        print(f"src_normalized.max: {src_normalized.max()}")
+        print(f"src_normalized.min: {src_normalized.min()}")
+        print(f"src_normalized.std: {src_normalized.std()}")
+        print("-" * 50)
+        print(f"src_scaled.max: {src_scaled.max()}")
+        print(f"src_scaled.min: {src_scaled.min()}")
+        print(f"src_scaled.std: {src_scaled.std()}")
+
         trg = torch.cat([sos_tensor, trg, eos_tensor], dim=0)  # [trg_len+2, batch_size, d_model]
 
         src = self.pos_encoder(src).to(src.device)  # [src_len, batch_size, d_model]
         trg = self.pos_decoder(trg).to(trg.device)  # [trg_len+2, batch_size, d_model]
-        latent_representation = self.encoder(src)  # [src_len, batch_size, d_model]
-        output = self.decoder(trg[:-1, :], latent_representation)  # [trg_len+1, batch_size, d_model]
 
-        output = self.fc_out(output).transpose(0, 1)  # [batch_size, trg_len+1, d_model]
+        latent_representation = self.encoder(src)  # [src_len, batch_size, d_model]
+        latent_representation = self.relu(latent_representation)
+
+        output = self.decoder(trg, latent_representation)  # [trg_len+2, batch_size, d_model]
+
+        # Remove sos and eos from output
+        output = output[1:-1, :, :]  # [trg_len, batch_size, d_model]
+
+        # output = torch.exp(output)  # [trg_len, batch_size, d_model]
+        denormalized_output = (output * trg.std()) + trg.mean()  # [trg_len, batch_size, d_model]
+
+        print(f"denormalized_output.mean: {denormalized_output.mean()}")
+        print(f"denormalized_output.max: {denormalized_output.max()}")
+        print(f"denormalized_output.min: {denormalized_output.min()}")
+        print(f"denormalized_output.std: {denormalized_output.std()}")
+
+        output = self.fc_out(output).transpose(0, 1)  # [batch_size, trg_len, d_model]
+        output = self.relu(output)  # [batch_size, trg_len, d_model]
 
         return output, latent_representation, sos_tensor, eos_tensor
 
-    def inference(self, sos_tensor, eos_tensor, latent_representation, max_len):
+    def inference(self, sos_tensor, eos_tensor, latent_representation, max_len=50):
         device = latent_representation.device  # No specific shape, this is a device type
 
         # Initialize output tensor with zeros
@@ -82,7 +116,7 @@ class TransformerAutoencoder(nn.Module):
 
             # Apply linear layer to the output
             # Shape of out: [i, batch_size, d_model]
-            out = self.latent_representation(out)
+            out = self.fc_out(out)
 
             # Set the current output
             # Shape of outputs: [max_len, batch_size, d_model]
@@ -95,8 +129,7 @@ class TransformerAutoencoder(nn.Module):
                 return outputs[:i]
 
         # If EOS was not hit, return all outputs
-        # Shape: [max_len, batch_size, d_model]
-        return outputs
+        return outputs.transpose(0, 1)  # [batch_size, max_len, d_model]
 
 
 # class TransformerAutoencoder2(nn.Module):

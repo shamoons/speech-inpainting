@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import torchaudio
 from data_loader import get_dataloader
 from model import TransformerAutoencoder
-from utils import melspectrogram_transform, load_checkpoint, get_arg_parser
+from utils import load_checkpoint, get_arg_parser
 
 
 def main():
@@ -20,22 +20,25 @@ def main():
     print(f"Using device: {device}")
     device = torch.device(device)
 
-    transform = melspectrogram_transform(args.n_mels)
-    dataloader = get_dataloader(args.data_path, 1, transform, add_eos=False)
+    dataloader = get_dataloader(args.data_path, args.n_mels, 1)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, nhead=args.nhead, num_layers=args.num_layers,
-                                   dim_feedforward=args.dim_feedforward).to(device)
+    model = TransformerAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
+                                   nhead=args.nhead, max_len=1000).to(device)
 
     if args.checkpoint_path:
         print(f"Loading checkpoint from {args.checkpoint_path}")
-        _, _ = load_checkpoint(args.checkpoint_path, model)
+        _, _, latent_representation, sos_tensor, eos_tensor = load_checkpoint(args.checkpoint_path, model)
 
     model.eval()
     with torch.no_grad():
         for _, mel_specgrams in enumerate(dataloader):
             mel_specgrams = mel_specgrams.to(device)  # shape: (batch_size, T, n_mels)
 
-            output = model(mel_specgrams)  # shape: (batch_size, T, n_mels)
+            output, _, _, _ = model(mel_specgrams, mel_specgrams)  # shape: (batch_size, T, n_mels)
+            # Remove the first timestep from the predicted spectrograms
+            output = output[:, 1:, :]  # shape: (batch_size, T-1, n_mels)
+            # output = model.inference(sos_tensor=sos_tensor, eos_tensor=eos_tensor,
+            #  latent_representation=latent_representation)  # shape: (batch_size, T, n_mels)
 
             print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
             print("output", output.size(), output[0])

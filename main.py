@@ -43,7 +43,14 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         mel_specgrams = mel_specgrams.to(device)
 
         optimizer.zero_grad()
-        output, _, _, _ = model(mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+        output, latent_representation, sos_tensor, eos_tensor = model(
+            mel_specgrams, mel_specgrams)  # Output shape: (batch_size, T, n_mels)
+        # print(f"mel_specgrams.mean: {mel_specgrams.mean()}")
+        # print(f"mel_specgrams.max: {mel_specgrams.max()}")
+        # print(f"mel_specgrams.min: {mel_specgrams.min()}")
+        # print(f"output.mean: {output.mean()}")
+        # print(f"output.max: {output.max()}")
+        # print(f"output.min: {output.min()}")
 
         loss = criterion(output, mel_specgrams)
         loss.backward()
@@ -51,13 +58,20 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         epoch_loss += loss.item()
         progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
 
-    return epoch_loss / len(dataloader)
+    return epoch_loss / len(dataloader), latent_representation, sos_tensor, eos_tensor
 
 
 def loss_fn(y_pred, y_true):
-    # Remove the last timestep from the predicted spectrograms
-    y_pred = y_pred[:, :-1, :]
-    return torch.nn.MSELoss()(torch.log1p(torch.nn.ReLU()(y_pred)), torch.log1p(torch.nn.ReLU()(y_true)))
+    print(f"y_pred.mean: {y_pred.mean()}")
+    print(f"y_pred.max: {y_pred.max()}")
+    print(f"y_pred.min: {y_pred.min()}")
+    print(f"y_pred.std: {y_pred.std()}")
+    print("====================================")
+    print(f"y_true.mean: {y_true.mean()}")
+    print(f"y_true.max: {y_true.max()}")
+    print(f"y_true.min: {y_true.min()}")
+    print(f"y_true.std: {y_true.std()}")
+    return torch.nn.MSELoss()(y_pred, y_true)
 
 
 def main():
@@ -75,6 +89,7 @@ def main():
 
     # Initialize wandb
     wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
+    print("wandb dir:", wandb.run.dir)
 
     train_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
     val_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size,
@@ -90,11 +105,12 @@ def main():
 
     start_epoch = 0
     if args.checkpoint_path:
-        start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
+        start_epoch, _, _, _, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
 
     total_epochs = start_epoch + args.epochs
     for epoch in range(start_epoch, total_epochs):
-        train_loss = train_epoch(model, train_dataloader, criterion, optimizer, device)
+        train_loss, latent_representation, sos_tensor, eos_tensor = train_epoch(
+            model, train_dataloader, criterion, optimizer, device)
         val_loss = validate_epoch(model, val_dataloader, criterion, device)
 
         # Logging losses to console and to wandb
@@ -110,8 +126,12 @@ def main():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
-            'val_loss': val_loss
-        }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
+            'val_loss': val_loss,
+            'latent_representation': latent_representation,
+            'sos_tensor': sos_tensor,
+            'eos_tensor': eos_tensor
+            # }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
+        }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
 
     # Finish the wandb run
     wandb.finish()
