@@ -21,9 +21,9 @@ def validate_epoch(model, dataloader, criterion, device):
         for batch_idx, (mel_specgrams, seq_lengths) in progress_bar:
             # mel_specgrams shape: (batch_size, T, n_mels)
             mel_specgrams = mel_specgrams.to(device)
-            output, _, _, _ = model(mel_specgrams, mel_specgrams, seq_lengths,
-                                    seq_lengths)  # Output shape: (batch_size, T, n_mels)
-            loss = criterion(output, mel_specgrams)
+            seq_lengths = seq_lengths.to(device)
+            output, _, _, _ = model(mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
+            loss = criterion(output, mel_specgrams, seq_lengths)
             epoch_loss += loss.item()
             progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
 
@@ -40,11 +40,12 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     for batch_idx, (mel_specgrams, seq_lengths) in progress_bar:
         # mel_specgrams shape: (batch_size, T, n_mels)
         mel_specgrams = mel_specgrams.to(device)
+        seq_lengths = seq_lengths.to(device)
 
         optimizer.zero_grad()
         output, latent_representation, sos_tensor, eos_tensor = model(
-            mel_specgrams, mel_specgrams, seq_lengths, seq_lengths)  # Output shape: (batch_size, T, n_mels)
-        loss = criterion(output, mel_specgrams)
+            mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
+        loss = criterion(output, mel_specgrams, seq_lengths)
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item()
@@ -53,14 +54,31 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     return epoch_loss / len(dataloader), latent_representation, sos_tensor, eos_tensor
 
 
-def loss_fn(y_pred, y_true):
-    # print(
-    #     f"y_pred: mean: {y_pred.mean()}\tstd: {y_pred.std()}\tmax: {y_pred.max()}\tmin: {y_pred.min()}")
-    # print(
-    #     f"y_true: mean: {y_true.mean()}\tstd: {y_true.std()}\tmax: {y_true.max()}\tmin: {y_true.min()}")
+def loss_fn(y_pred, y_true, seq_lengths):
+    # y_pred shape: (batch_size, T + 1, n_mels)
+    # y_true shape: (batch_size, T, n_mels)
+    # seq_lengths shape: (batch_size)
 
-    return torch.nn.MSELoss()(y_pred, y_true)
-    # return torch.mean((torch.log1p(y_pred) - torch.log1p(y_true)) ** 2)
+    print(f"y_pred shape: {y_pred.shape}")
+    print(f"y_true shape: {y_true.shape}")
+
+    batch_size, _, _ = y_pred.shape
+
+    # Initialize a list to hold the processed sequences
+    y_pred_masked_list = []
+
+    # For each item in the batch
+    for i in range(batch_size):
+        # Remove the timestep at seq_lengths[i] (i.e., the EOS timestep)
+        pre_eos = y_pred[i, :seq_lengths[i]]
+        post_eos = y_pred[i, seq_lengths[i]+1:]
+        masked = torch.cat((pre_eos, post_eos), dim=0)
+        y_pred_masked_list.append(masked)
+
+    # Stack the processed sequences back into a tensor
+    y_pred_masked = torch.stack(y_pred_masked_list).to(y_pred.device)
+
+    return torch.nn.MSELoss()(y_pred_masked, y_true)
 
 
 def main():
