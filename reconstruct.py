@@ -36,7 +36,6 @@ def main():
 
             output, _, _, _ = model(mel_specgrams, mel_specgrams)  # shape: (batch_size, T, n_mels)
             # Remove the first timestep from the predicted spectrograms
-            output = output[:, 1:, :]  # shape: (batch_size, T-1, n_mels)
             # output = model.inference(sos_tensor=sos_tensor, eos_tensor=eos_tensor,
             #  latent_representation=latent_representation)  # shape: (batch_size, T, n_mels)
 

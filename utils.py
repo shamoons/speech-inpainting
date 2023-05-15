@@ -18,7 +18,8 @@ def load_checkpoint(filepath, model, optimizer=None):
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    return checkpoint['epoch'], checkpoint['train_loss'], checkpoint['latent_representation'], checkpoint['sos_tensor'], checkpoint['eos_tensor']
+    return checkpoint['epoch'], checkpoint['train_loss'], checkpoint['latent_representation'], \
+        checkpoint['sos_tensor'], checkpoint['eos_tensor']
 
 
 def get_arg_parser():
@@ -26,14 +27,14 @@ def get_arg_parser():
     parser.add_argument('--data_path', type=str, default='./data', help='Path to the dataset')
     parser.add_argument('--batch_size', type=int, default=512, help='Batch size for training')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
-    parser.add_argument('--initial_lr', type=float, default=0.001, help='Initial learning rate for the optimizer')
     parser.add_argument('--n_mels', type=int, default=128, help='Number of mel frequency bands in melspectrogram')
     parser.add_argument('--checkpoint_path', type=str, default='', help='Path to the checkpoint file')
     parser.add_argument('--use_cuda', action=argparse.BooleanOptionalAction, help='Use CUDA if available')
     parser.add_argument('--use_mps', action=argparse.BooleanOptionalAction, help='Use MPS if available')
-    parser.add_argument('--nhead', type=int, default=4, help='Number of attention heads')
-    parser.add_argument('--num_layers', type=int, default=4, help='Number of encoder/decoder layers')
-    parser.add_argument('--dim_feedforward', type=int, default=512, help='Dimension of the feedforward network')
+    parser.add_argument('--nhead', type=int, default=2, help='Number of attention heads')
+    parser.add_argument('--num_layers', type=int, default=2, help='Number of encoder/decoder layers')
+    parser.add_argument('--embedding_dim', type=int, default=256,
+                        help='Dimension of the the input and output embeddings')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout probability')
     parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
     return parser

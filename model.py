@@ -1,217 +1,164 @@
+# model.py
 import torch
 import torch.nn as nn
 
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, dropout=0.1, max_len=5000):
+    def __init__(self, embedding_dim, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
-        pe = torch.zeros(max_len, d_model)
+        # Initialize the positional encodings
+        pe = torch.zeros(max_len, embedding_dim)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-torch.log(torch.tensor(10000.0)) / d_model))
+        div_term = torch.exp(torch.arange(0, embedding_dim, 2).float() *
+                             (-torch.log(torch.tensor(10000.0)) / embedding_dim))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        # x: [seq_len, batch_size, d_model]
+        """
+        x: Tensor of shape [seq_len, batch_size, embedding_dim]
+        """
+        # Add positional encoding to the input
         x = x + self.pe[:x.size(0), :]
         return self.dropout(x)
 
 
 class TransformerAutoencoder(nn.Module):
-    def __init__(self, d_model, num_layers, nhead, max_len, dropout=0.0):
+    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, dropout=0.0):
         super(TransformerAutoencoder, self).__init__()
 
-        self.sos_embedding = nn.Parameter(torch.randn(d_model))  # [d_model]
-        self.eos_embedding = nn.Parameter(torch.randn(d_model))  # [d_model]
+        # Initialize start of sequence and end of sequence embeddings
+        self.sos_embedding = nn.Parameter(torch.randn(d_model))
+        self.eos_embedding = nn.Parameter(torch.randn(d_model))
 
-        self.encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead), num_layers=num_layers
+        # Initialize input and target encoders
+        self.input_encoder = nn.Linear(d_model, embedding_dim)
+        self.target_encoder = nn.Linear(d_model, embedding_dim)
+
+        # Initialize transformer encoder and decoder layers
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead), num_layers=num_layers
         )
-        self.decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(d_model=d_model, nhead=nhead), num_layers=num_layers
+        self.transformer_decoder = nn.TransformerDecoder(
+            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=nhead), num_layers=num_layers
         )
 
-        self.fc_out = nn.Linear(d_model, d_model)
-        self.pos_encoder = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
-        self.pos_decoder = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
+        # Initialize final fully connected layer
+        self.fc_out = nn.Linear(embedding_dim, d_model)
 
-    def forward(self, src, trg):
-        # src: [batch_size, src_len, d_model]
-        # trg: [batch_size, trg_len, d_model]
+        # Initialize positional encoders for input and target
+        self.pos_encoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_decoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
+
+        self.d_model = d_model
+        self.device = None
+
+    def forward(self, src, trg, src_lengths, trg_lengths):
+        """
+        src: Tensor of shape [batch_size, src_len, d_model]
+        trg: Tensor of shape [batch_size, trg_len, d_model]
+        src_lengths: Tensor of shape [batch_size]
+        trg_lengths: Tensor of shape [batch_size]
+        """
+        self.device = src.device
+
+        # Transpose source and target tensors for transformer
         src = src.transpose(0, 1)  # [src_len, batch_size, d_model]
         trg = trg.transpose(0, 1)  # [trg_len, batch_size, d_model]
 
-        sos_tensor = self.sos_embedding.repeat(1, src.size(1), 1).to(src.device)  # [1, batch_size, d_model]
-        eos_tensor = self.eos_embedding.repeat(1, src.size(1), 1).to(src.device)  # [1, batch_size, d_model]
+        # Generate masks based on sequence lengths
+        src_mask = torch.arange(src.size(0) + 1).unsqueeze(1) < (src_lengths +
+                                                                 1).unsqueeze(0)  # [src_len+1, batch_size]
+        src_mask = src_mask.transpose(0, 1).to(self.device)  # [batch_size, src_len+1]
+        src_key_padding_mask = ~src_mask
 
-        # src = torch.log1p(src)  # [src_len, batch_size, d_model]
-        # trg = torch.log1p(trg)  # [trg_len, batch_size, d_model]
-        src_normalized = (src - src.mean()) / src.std()  # [src_len, batch_size, d_model]
-        trg_normalized = (trg - trg.mean()) / trg.std()  # [trg_len, batch_size, d_model]
+        # Generate target mask
+        trg_mask = nn.Transformer.generate_square_subsequent_mask(trg.size(0), self.device)  # [trg_len, trg_len]
 
+        # Repeat sos and eos tensor for each instance in the batch
+        sos_tensor = self.sos_embedding.repeat(1, src.size(1), 1).to(self.device)  # [1, batch_size, d_model]
+        eos_tensor = self.eos_embedding.repeat(1, src.size(1), 1).to(self.device)  # [1, batch_size, d_model]
+
+        # Normalize source and target tensors
+        src_mean = src.mean()
+        src_std = src.std()
+        trg_mean = trg.mean()
+        trg_std = trg.std()
+
+        src_normalized = (src - src_mean) / src_std  # [src_len, batch_size, d_model]
+        trg_normalized = (trg - trg_mean) / trg_std  # [trg_len, batch_size, d_model]
+
+        # Apply logarithm plus 1 for further stability
         src_scaled = torch.log1p(src_normalized)  # [src_len, batch_size, d_model]
         trg_scaled = torch.log1p(trg_normalized)  # [trg_len, batch_size, d_model]
 
-        print(f"src_normalized.mean: {src_normalized.mean()}")
-        print(f"src_normalized.max: {src_normalized.max()}")
-        print(f"src_normalized.min: {src_normalized.min()}")
-        print(f"src_normalized.std: {src_normalized.std()}")
-        print("-" * 50)
-        print(f"src_scaled.max: {src_scaled.max()}")
-        print(f"src_scaled.min: {src_scaled.min()}")
-        print(f"src_scaled.std: {src_scaled.std()}")
+        # Concatenate start of sequence tensors with source
+        src_sos = torch.cat([sos_tensor, src_scaled], dim=0)  # [src_len+1, batch_size, d_model]
 
-        trg = torch.cat([sos_tensor, trg, eos_tensor], dim=0)  # [trg_len+2, batch_size, d_model]
+        # Insert end of sequence tensors in target before padding
+        trg_eos = self._insert_eos_before_pad(trg_scaled, eos_tensor, trg_lengths)  # [trg_len+1, batch_size, d_model]
 
-        src = self.pos_encoder(src).to(src.device)  # [src_len, batch_size, d_model]
-        trg = self.pos_decoder(trg).to(trg.device)  # [trg_len+2, batch_size, d_model]
+        embedding_scaling_factor = torch.sqrt(torch.tensor(self.d_model).float())
 
-        latent_representation = self.encoder(src)  # [src_len, batch_size, d_model]
-        latent_representation = self.relu(latent_representation)
+        # Apply input and target encoders and scale the output by square root of d_model
+        # [src_len + 1, batch_size, embedding_dim]
+        src_embedding = self.input_encoder(src_sos) * embedding_scaling_factor
+        # [trg_len+1, batch_size, embedding_dim]
+        tgt_embedding = self.target_encoder(trg_eos) * embedding_scaling_factor
 
-        output = self.decoder(trg, latent_representation)  # [trg_len+2, batch_size, d_model]
+        # Apply positional encoding to the source and target embeddings
+        src_with_pe = self.pos_encoder(src_embedding).to(self.device)  # [src_len + 1, batch_size, embedding_dim]
+        trg_with_pe = self.pos_decoder(tgt_embedding).to(self.device)  # [trg_len+1, batch_size, embedding_dim]
 
-        # Remove sos and eos from output
-        output = output[1:-1, :, :]  # [trg_len, batch_size, d_model]
+        # Pass the source embeddings through the transformer encoder
+        latent_representation = self.transformer_encoder(
+            src_with_pe, src_key_padding_mask=src_key_padding_mask)  # [src_len+1, batch_size, embedding_dim]
 
-        # output = torch.exp(output)  # [trg_len, batch_size, d_model]
-        denormalized_output = (output * trg.std()) + trg.mean()  # [trg_len, batch_size, d_model]
+        # Pass the target embeddings and the encoder output through the transformer decoder
+        # [trg_len+1, batch_size, embedding_dim]
+        output = self.transformer_decoder(trg_with_pe, latent_representation, tgt_mask=trg_mask,
+                                          memory_key_padding_mask=src_key_padding_mask)
 
-        print(f"denormalized_output.mean: {denormalized_output.mean()}")
-        print(f"denormalized_output.max: {denormalized_output.max()}")
-        print(f"denormalized_output.min: {denormalized_output.min()}")
-        print(f"denormalized_output.std: {denormalized_output.std()}")
+        # Remove eos from the output
+        output_without_eos = self._remove_eos(output, trg_lengths)  # [trg_len, batch_size, embedding_dim]
 
-        output = self.fc_out(output).transpose(0, 1)  # [batch_size, trg_len, d_model]
-        output = self.relu(output)  # [batch_size, trg_len, d_model]
+        # Pass the decoder output through the final layer
+        output_spectrogram = self.fc_out(output_without_eos).transpose(0, 1)  # [batch_size, trg_len, d_model]
 
-        return output, latent_representation, sos_tensor, eos_tensor
+        # Reverse the earlier applied transformations to get the final output
+        unscaled_output = torch.exp(output_spectrogram)  # [batch_size, trg_len, d_model]
+        denormalized_output = (unscaled_output * src_std) + src_mean  # [batch_size, trg_len, d_model]
 
-    def inference(self, sos_tensor, eos_tensor, latent_representation, max_len=50):
-        device = latent_representation.device  # No specific shape, this is a device type
+        return denormalized_output, latent_representation, sos_tensor, eos_tensor
 
-        # Initialize output tensor with zeros
-        # Shape: [max_len, batch_size, d_model]
-        outputs = torch.zeros(max_len, latent_representation.size(1), latent_representation.size(-1)).to(device)
+    def _remove_eos(self, tensor, lengths):
+        """
+        tensor: a Tensor of shape [seq_len, batch_size, d_model]
+        lengths: a Tensor of shape [batch_size]
+        """
+        output = torch.zeros_like(tensor)
 
-        # Set the first output as the SOS tensor
-        # Shape: [max_len, batch_size, d_model]
-        outputs[0, :] = sos_tensor.to(device)
+        # For each sequence in the batch, copy until the actual length, effectively removing the eos token
+        for i in range(tensor.size(1)):
+            length = lengths[i]
+            output[:length, i, :] = tensor[:length, i, :]
 
-        # Loop over the maximum length
-        for i in range(1, max_len):
-            # Get positional encoding for current outputs
-            # Shape of trg_tmp: [i, batch_size, d_model]
-            trg_tmp = self.pos_decoder(outputs[:i])
+        return output
 
-            # Run decoder
-            # Shape of out: [i, batch_size, d_model]
-            out = self.decoder(trg_tmp, latent_representation)
-
-            # Apply linear layer to the output
-            # Shape of out: [i, batch_size, d_model]
-            out = self.fc_out(out)
-
-            # Set the current output
-            # Shape of outputs: [max_len, batch_size, d_model]
-            outputs[i] = out[-1]
-
-            # If all values in the current output equal the EOS tensor, end the loop
-            if torch.all(torch.eq(outputs[i], eos_tensor.to(device))):
-                # Return outputs until current index
-                # Shape: [i, batch_size, d_model]
-                return outputs[:i]
-
-        # If EOS was not hit, return all outputs
-        return outputs.transpose(0, 1)  # [batch_size, max_len, d_model]
-
-
-# class TransformerAutoencoder2(nn.Module):
-#     def __init__(self, d_model, nhead, num_layers, dim_feedforward, dropout=0.0):
-#         super(TransformerAutoencoder2, self).__init__()
-
-#         self.encoder = nn.TransformerEncoder(
-#             encoder_layer=nn.TransformerEncoderLayer(d_model, nhead, dim_feedforward, dropout),
-#             num_layers=num_layers,
-#         )
-#         self.relu = nn.ReLU()
-
-#         self.bottleneck = nn.Linear(d_model, d_model)
-
-#         self.decoder = nn.TransformerDecoder(
-#             decoder_layer=nn.TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout),
-#             num_layers=num_layers
-#         )
-
-#         self.d_model = d_model
-
-#     def forward(self, src, tgt=None):
-#         num_time_frames = src.size(1)
-
-#         # Generate sinusoidal position embeddings
-#         position_embeddings_src = self._get_sinusoidal_position_embeddings(num_time_frames, self.d_model).to(src.device)
-
-#         # Add position embeddings to input
-#         src = src + position_embeddings_src
-
-#         src = src.transpose(0, 1)  # shape: (T, batch_size, n_mels)
-
-#         # Pass the input through the encoder
-#         memory = self.encoder(src).transpose(0, 1)  # shape: (batch_size, T, n_mels)
-#         memory = self.relu(memory)
-
-#         # Pass the output of the encoder through the bottleneck
-#         bottleneck = self.bottleneck(memory)  # shape: (batch_size, T, n_mels)
-#         bottleneck = self.relu(bottleneck)
-#         bottleneck = bottleneck.mean(dim=1)  # shape: (batch_size, n_mels)
-
-#         if tgt is not None:
-#             # In training mode, we have the target sequence
-#             # Prepend the bottleneck to the target sequence
-#             tgt = torch.cat((bottleneck.unsqueeze(1), tgt), dim=1)  # shape: (batch_size, T + 1, n_mels)
-
-#             # Generate position embeddings for the new target sequence
-#             position_embeddings_tgt = self._get_sinusoidal_position_embeddings(
-#                 num_time_frames + 1, self.d_model).to(tgt.device)  # +1 to account for the bottleneck
-
-#             tgt = tgt + position_embeddings_tgt
-
-#             tgt = tgt.transpose(0, 1)  # shape: (T + 1, batch_size, n_mels)
-#             output = self.decoder(tgt, memory.transpose(0, 1))  # shape: (T + 1, batch_size, n_mels)
-
-#         else:
-#             # In inference mode, we generate the target sequence step by step
-#             output = self._generate_sequence(bottleneck, memory.transpose(0, 1), num_time_frames)
-
-#         # Transpose output back to (batch_size, T, n_mels)
-#         output = output.transpose(0, 1)
-
-#         return output, bottleneck
-
-#     def inference(self, bottleneck, max_length):
-
-
-#     def _generate_sequence(self, bottleneck, memory, max_length):
-#         # Initialize output with the bottleneck
-#         output = bottleneck.unsqueeze(0)  # shape: (1, batch_size, n_mels)
-#         for _ in range(max_length):
-#             output_step = self.decoder(output, memory)
-#             output = torch.cat((output, output_step[-1:, :, :]), dim=0)
-#         return output
-
-#     def _get_sinusoidal_position_embeddings(self, num_positions, d_model):
-#         position_embeddings = torch.zeros(num_positions, d_model)
-#         positions = torch.arange(0, num_positions, dtype=torch.float).unsqueeze(1)
-#         div_term = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
-
-#         position_embeddings[:, 0::2] = torch.sin(positions * div_term)
-#         position_embeddings[:, 1::2] = torch.cos(positions * div_term)
-#         position_embeddings = position_embeddings.unsqueeze(0)
-
-#         return position_embeddings
+    def _insert_eos_before_pad(self, tensor, eos_tensor, lengths):
+        """
+        tensor: a Tensor of shape [seq_len, batch_size, d_model]
+        eos_tensor: a Tensor of shape [1, batch_size, d_model]
+        lengths: a Tensor of shape [batch_size]
+        """
+        seq_len, batch_size, _ = tensor.shape
+        output = torch.zeros(seq_len + 1, batch_size, tensor.shape[2]).to(tensor.device)
+        for i in range(batch_size):
+            length = lengths[i]
+            output[:length, i, :] = tensor[:length, i, :]
+            output[length, i, :] = eos_tensor[0, i, :]  # insert eos at the end of sequence or before padding
+        return output
