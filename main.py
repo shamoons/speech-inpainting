@@ -59,9 +59,6 @@ def loss_fn(y_pred, y_true, seq_lengths):
     # y_true shape: (batch_size, T, n_mels)
     # seq_lengths shape: (batch_size)
 
-    print(f"y_pred shape: {y_pred.shape}")
-    print(f"y_true shape: {y_true.shape}")
-
     batch_size, _, _ = y_pred.shape
 
     # Initialize a list to hold the processed sequences
@@ -71,7 +68,7 @@ def loss_fn(y_pred, y_true, seq_lengths):
     for i in range(batch_size):
         # Remove the timestep at seq_lengths[i] (i.e., the EOS timestep)
         pre_eos = y_pred[i, :seq_lengths[i]]
-        post_eos = y_pred[i, seq_lengths[i]+1:]
+        post_eos = y_pred[i, seq_lengths[i] + 1:]
         masked = torch.cat((pre_eos, post_eos), dim=0)
         y_pred_masked_list.append(masked)
 

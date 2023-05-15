@@ -75,7 +75,7 @@ class TransformerAutoencoder(nn.Module):
         trg = self._insert_eos_before_pad(src, eos_tensor, src_lengths)  # [src_len+1, batch_size, d_model]
 
         # Update sequence lengths considering the addition of sos and eos tokens
-        src_lengths += 1
+        src_lengths = src_lengths + 1
 
         # Generate masks based on sequence lengths
         src_mask = torch.arange(src_sos.size(0)).unsqueeze(1).to(
@@ -85,7 +85,7 @@ class TransformerAutoencoder(nn.Module):
 
         # Generate target mask
         trg_mask = nn.Transformer.generate_square_subsequent_mask(
-            trg.size(0), self.device)  # [src_len+1, src_len+1]
+            trg.size(0)).to(self.device)  # [src_len+1, src_len+1]
 
         embedding_scaling_factor = torch.sqrt(torch.tensor(self.d_model).float())
 
