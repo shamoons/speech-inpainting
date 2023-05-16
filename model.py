@@ -173,6 +173,7 @@ class TransformerAutoencoder(nn.Module):
         for _ in range(max_len):
             # Pass the decoder input through the transformer decoder
             output = self.transformer_decoder(decoder_input, latent_representation)
+            print(f"generated_sequence: {generated_sequence.shape}")
 
             # Get the last output token from the transformer
             output_token = output[-1].unsqueeze(0)
