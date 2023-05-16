@@ -20,10 +20,11 @@ def main():
     print(f"Using device: {device}")
     device = torch.device(device)
 
-    dataloader = get_dataloader(args.data_path, args.n_mels, 1)
+    dataloader = get_dataloader(args.data_path, args.n_mels, 10)
 
     model = TransformerAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
-                                   nhead=args.nhead, max_len=1000).to(device)
+                                   nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
+                                   dropout=args.dropout).to(device)
 
     if args.checkpoint_path:
         print(f"Loading checkpoint from {args.checkpoint_path}")
@@ -31,13 +32,26 @@ def main():
 
     model.eval()
     with torch.no_grad():
-        for _, mel_specgrams in enumerate(dataloader):
-            mel_specgrams = mel_specgrams.to(device)  # shape: (batch_size, T, n_mels)
+        for _, (mel_specgrams, _) in enumerate(dataloader):
+            mel_specgrams = mel_specgrams[0].unsqueeze(0).to(device)  # shape: (batch_size, T, n_mels)
 
-            output, _, _, _ = model(mel_specgrams, mel_specgrams)  # shape: (batch_size, T, n_mels)
+            latent_representation = latent_representation.transpose(0, 1)  # shape: (batch_size, T, d_model)
+            latent_representation = latent_representation[0].unsqueeze(0)  # shape: (batch_size, T, d_model)
+
+            sos_tensor = sos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
+            sos_tensor = sos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
+
+            eos_tensor = eos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
+            eos_tensor = eos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
+
+            print(f"mel_specgrams shape: {mel_specgrams.shape}")
+            print(f"latent_representation shape: {latent_representation.shape}")
+            print(f"sos_tensor shape: {sos_tensor.shape}")
+            print(f"eos_tensor shape: {eos_tensor.shape}")
+
             # Remove the first timestep from the predicted spectrograms
-            # output = model.inference(sos_tensor=sos_tensor, eos_tensor=eos_tensor,
-            #  latent_representation=latent_representation)  # shape: (batch_size, T, n_mels)
+            output = model.inference(latent_representation=latent_representation, sos_tensor=sos_tensor,
+                                     eos_tensor=eos_tensor, max_len=1000)  # shape: (batch_size, T, n_mels)
 
             print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
             print("output", output.size(), output[0])
@@ -46,20 +60,6 @@ def main():
 
     original = mel_specgrams[0].cpu().numpy()
     reconstructed = output[0].cpu().numpy()
-
-    # # Calculate average for each time step for original and reconstructed
-    # original_avg_per_timestep = original.mean(axis=1)
-    # reconstructed_avg_per_timestep = reconstructed.mean(axis=1)
-
-    # # Print averages
-    # print("Average value for each time step in the original tensor:")
-    # print(original.shape, original_avg_per_timestep)
-    # print("Average value for each time step in the reconstructed tensor:")
-    # print(reconstructed.shape, reconstructed_avg_per_timestep)
-
-    # print("Original", original)
-    # print("Reconstructed", reconstructed)
-    # quit()
 
     # Find the index of the EOS token in the original tensor
     EOS_token = torch.tensor(-1.0)  # Assuming this is your EOS token
@@ -70,18 +70,6 @@ def main():
     else:
         original = mel_specgrams[0].cpu().numpy()
         reconstructed = output[0].cpu().numpy()
-
-    # print(f"Original shape: {original.shape}")
-    # print(f"Reconstructed shape: {reconstructed.shape}")
-    # # Calculate average for each time step for original and reconstructed
-    # original_avg_per_timestep = mel_specgrams.mean(axis=1)
-    # reconstructed_avg_per_timestep = output.mean(axis=1)
-
-    # # Print averages
-    # print("Average value for each time step in the original tensor:")
-    # print(original.shape, original_avg_per_timestep)
-    # print("Average value for each time step in the reconstructed tensor:")
-    # print(reconstructed.shape, reconstructed_avg_per_timestep)
 
     # Plot original and reconstructed melspectrograms
     print("Saving plot")
@@ -100,7 +88,8 @@ def main():
     # Inverse transformations to restore audio
     inv_mel_scale = torchaudio.transforms.InverseMelScale(n_stft=201, n_mels=args.n_mels, sample_rate=16000).to(device)
     griffin_lim = torchaudio.transforms.GriffinLim(
-        n_fft=400, hop_length=160, win_length=400, power=2, n_iter=64).to(device)
+        n_fft=400, hop_length=160, win_length=400, power=2, n_iter=64
+    ).to(device)
 
     original_tensor = torch.tensor(original)[None, ...].transpose(-1, -2).to(device)  # shape: (1, n_mels, T)
     reconstructed_tensor = torch.tensor(reconstructed)[None, ...].transpose(-1, -2).to(device)  # shape: (1, n_mels, T)

@@ -138,8 +138,8 @@ def main():
             'latent_representation': latent_representation,
             'sos_tensor': sos_tensor,
             'eos_tensor': eos_tensor
-            # }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
-        }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
+        }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
+        # }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
 
     # Finish the wandb run
     wandb.finish()
