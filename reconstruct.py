@@ -32,7 +32,7 @@ def main():
 
     model.eval()
     with torch.no_grad():
-        for _, (mel_specgrams, _) in enumerate(dataloader):
+        for _, (mel_specgrams, seq_lengths) in enumerate(dataloader):
             mel_specgrams = mel_specgrams[0].unsqueeze(0).to(device)  # shape: (batch_size, T, n_mels)
 
             latent_representation = latent_representation.transpose(0, 1)  # shape: (batch_size, T, d_model)
@@ -50,8 +50,8 @@ def main():
             print(f"eos_tensor shape: {eos_tensor.shape}")
 
             # Remove the first timestep from the predicted spectrograms
-            output = model.inference(latent_representation=latent_representation, sos_tensor=sos_tensor,
-                                     eos_tensor=eos_tensor, max_len=100)  # shape: (batch_size, T, n_mels)
+            output = model.inference(latent_representation=latent_representation, sos_embedding=sos_tensor,
+                                     eos_embedding=eos_tensor, max_len=100)  # shape: (batch_size, T, n_mels)
 
             print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
             print("output", output.size(), output[0])

@@ -136,57 +136,85 @@ class TransformerAutoencoder(nn.Module):
             trg_eos[length, i] = eos[0, i]
         return trg_eos
 
-    def inference(self, latent_representation, sos_tensor, eos_tensor, max_len):
+    def inference(self, sos_embedding, eos_embedding, latent_representation, max_len):
         """
         Perform inference with the model.
 
         Parameters:
-        latent_representation: The output of the Transformer encoder. Shape: [batch_size, src_len+1, embedding_dim]
-        sos_tensor: The start of sequence tensor. Shape: [batch_size, 1, d_model]
-        eos_tensor: The end of sequence tensor. Shape: [batch_size, 1, d_model]
+        sos_embedding: The start of sequence tensor. Shape: [batch_size, 1, d_model]
+        eos_embedding: The end of sequence tensor. Shape: [batch_size, 1, d_model]
         max_len: The maximum length of the sequence.
 
         Returns:
         The generated sequence. Shape: [src_len+1, batch_size, d_model]
         """
-        self.device = latent_representation.device
+        self.device = sos_embedding.device
 
-        # The first input to the decoder will be the sos_tensor
-        decoder_input = sos_tensor
+        # # The first input to the decoder will be the sos_embedding
+        # decoder_input = sos_embedding
 
-        # Initialize the sequence with the sos_tensor
-        generated_sequence = sos_tensor
+        # # Initialize the sequence with the sos_embedding
+        # generated_sequence = sos_embedding
 
-        # Cosine similarity
-        cos = nn.CosineSimilarity(dim=2, eps=1e-6)
+        # # Cosine similarity
+        # cos = nn.CosineSimilarity(dim=2, eps=1e-6)
 
-        latent_representation = latent_representation.transpose(0, 1)  # [src_len+1, batch_size embedding_dim]
-        decoder_input = decoder_input.transpose(0, 1)  # [1, batch_size,  d_model]
-        generated_sequence = generated_sequence.transpose(0, 1)  # [1, batch_size, d_model]
-        sos_tensor = sos_tensor.transpose(0, 1)  # [1, batch_size, d_model]
-        eos_tensor = eos_tensor.transpose(0, 1)  # [1, batch_size, d_model]
+        # decoder_input = decoder_input.transpose(0, 1)  # [1, batch_size,  d_model]
+        # generated_sequence = generated_sequence.transpose(0, 1)  # [1, batch_size, d_model]
+        # sos_embedding = sos_embedding.transpose(0, 1)  # [1, batch_size, d_model]
+        # eos_embedding = eos_embedding.transpose(0, 1)  # [1, batch_size, d_model]
+        # latent_representation = latent_representation.transpose(0, 1)  # [src_len+1, batch_size, d_model]
 
-        print(f"decoder_input: {decoder_input.shape}")
-        print(f"latent_representation: {latent_representation.shape}")
-        print(f"eos_tensor: {eos_tensor.shape}")
+        # # Create generated_sequence to hold the generated sequence
+        # generated_sequence = sos_embedding
+
+        # For each item in the batch
+        # for batch_idx in range(sos_embedding.size(1)):
+        #     input =
+
+        # quit()
 
         for _ in range(max_len):
+            # Apply positional encoding to the decoder input
+            decoder_input = self.pos_decoder(generated_sequence)  # [1, batch_size, d_model]
+
+            # Trim latent representation to the length of the decoder input
+            # [src_len+1, batch_size, d_model]
+            decoder_latent_representation = latent_representation[:decoder_input.size(0)]
+
             # Pass the decoder input through the transformer decoder
-            output = self.transformer_decoder(decoder_input, latent_representation)
-            print(f"generated_sequence: {generated_sequence.shape}")
+            output = self.transformer_decoder(decoder_input, decoder_latent_representation)
 
             # Get the last output token from the transformer
             output_token = output[-1].unsqueeze(0)
 
-            # Check if the output token is similar to the eos_tensor
-            if cos(output_token, eos_tensor).item() > 0.99:
+            # Check if the output token is similar to the eos_embedding
+            if cos(output_token, eos_embedding).item() > 0.99:
                 break
 
             # Append the output token to the generated sequence
             generated_sequence = torch.cat((generated_sequence, output_token), dim=0)
 
-            # Use the output token as the next input to the decoder
-            decoder_input = output_token
+            # # Apply target encoder and positional encoding to the decoder input
+            # decoder_input_embedding = self.target_encoder(
+            #     decoder_input) * torch.sqrt(torch.tensor(self.d_model).float()).to(self.device)
+            # decoder_input_with_pe = self.pos_decoder(decoder_input_embedding)
+
+            # # Pass the decoder input through the transformer decoder
+            # output = self.transformer_decoder(decoder_input_with_pe, generated_sequence)
+
+            # # Get the last output token from the transformer
+            # output_token = output[-1].unsqueeze(0)
+
+            # # Check if the output token is similar to the eos_embedding
+            # if cos(output_token, eos_embedding).item() > 0.99:
+            #     break
+
+            # # Append the output token to the generated sequence
+            # generated_sequence = torch.cat((generated_sequence, output_token), dim=0)
+
+            # # Use the output token as the next input to the decoder
+            # decoder_input = output_token
 
         # Pass the generated sequence through the final layer
         output_spectrogram = self.fc_out(generated_sequence).transpose(0, 1)  # [batch_size, src_len, d_model]
