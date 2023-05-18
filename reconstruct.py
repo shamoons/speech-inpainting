@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import torchaudio
 from data_loader import get_dataloader
 from model import TransformerAutoencoder
+from compression_model import TransformerCompressionAutoencoder
+
 from utils import load_checkpoint, get_arg_parser
 
 
@@ -20,38 +22,39 @@ def main():
     print(f"Using device: {device}")
     device = torch.device(device)
 
-    dataloader = get_dataloader(args.data_path, args.n_mels, 10)
+    dataloader = get_dataloader(args.data_path, args.n_mels, 100)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
-                                   nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
-                                   dropout=args.dropout).to(device)
+    model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
+                                              nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
+                                              dropout=args.dropout).to(device)
 
     if args.checkpoint_path:
         print(f"Loading checkpoint from {args.checkpoint_path}")
-        _, _, latent_representation, sos_tensor, eos_tensor = load_checkpoint(args.checkpoint_path, model)
+        _, _ = load_checkpoint(args.checkpoint_path, model)
 
     model.eval()
     with torch.no_grad():
         for _, (mel_specgrams, seq_lengths) in enumerate(dataloader):
             mel_specgrams = mel_specgrams[0].unsqueeze(0).to(device)  # shape: (batch_size, T, n_mels)
 
-            latent_representation = latent_representation.transpose(0, 1)  # shape: (batch_size, T, d_model)
-            latent_representation = latent_representation[0].unsqueeze(0)  # shape: (batch_size, T, d_model)
+            # latent_representation = latent_representation.transpose(0, 1)  # shape: (batch_size, T, d_model)
+            # latent_representation = latent_representation[0].unsqueeze(0)  # shape: (batch_size, T, d_model)
 
-            sos_tensor = sos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
-            sos_tensor = sos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
+            # sos_tensor = sos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
+            # sos_tensor = sos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
 
-            eos_tensor = eos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
-            eos_tensor = eos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
+            # eos_tensor = eos_tensor.transpose(0, 1)  # shape: (batch_size, T, n_mels)
+            # eos_tensor = eos_tensor[0].unsqueeze(0)  # shape: (batch_size, T, n_mels)
 
-            print(f"mel_specgrams shape: {mel_specgrams.shape}")
-            print(f"latent_representation shape: {latent_representation.shape}")
-            print(f"sos_tensor shape: {sos_tensor.shape}")
-            print(f"eos_tensor shape: {eos_tensor.shape}")
+            # print(f"mel_specgrams shape: {mel_specgrams.shape}")
+            # print(f"latent_representation shape: {latent_representation.shape}")
+            # print(f"sos_tensor shape: {sos_tensor.shape}")
+            # print(f"eos_tensor shape: {eos_tensor.shape}")
 
-            # Remove the first timestep from the predicted spectrograms
-            output = model.inference(latent_representation=latent_representation, sos_embedding=sos_tensor,
-                                     eos_embedding=eos_tensor, max_len=100)  # shape: (batch_size, T, n_mels)
+            # # Remove the first timestep from the predicted spectrograms
+            # output = model.inference(latent_representation=latent_representation, sos_embedding=sos_tensor,
+            #                          eos_embedding=eos_tensor, max_len=100)  # shape: (batch_size, T, n_mels)
+            output = model(mel_specgrams, seq_lengths)  # shape: (batch_size, T, n_mels)
 
             print("mel_specgrams", mel_specgrams.size(), mel_specgrams[0])
             print("output", output.size(), output[0])

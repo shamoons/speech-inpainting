@@ -133,7 +133,7 @@ class TransformerAutoencoder(nn.Module):
         """
         trg_eos = torch.cat([trg, eos], dim=0)  # [src_len+1, batch_size, embedding_dim]
         for i, length in enumerate(lengths):
-            trg_eos[length, i] = eos[0, i]
+            trg_eos[length, i] = eos[0, 0]
         return trg_eos
 
     def inference(self, sos_embedding, eos_embedding, latent_representation, max_len):

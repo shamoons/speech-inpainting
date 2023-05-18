@@ -19,8 +19,9 @@ class TransformerCompressionAutoencoder(nn.Module):
         """
         super(TransformerCompressionAutoencoder, self).__init__()
 
-        # Initialize end of sequence embedding
+        # Initialize start and end of sequence embedding
         self.eos_embedding = nn.Parameter(torch.randn(embedding_dim))
+        self.sos_embedding = nn.Parameter(torch.randn(embedding_dim))
 
         # Initialize input encoders
         self.input_encoder = nn.Linear(d_model, embedding_dim)
@@ -41,6 +42,17 @@ class TransformerCompressionAutoencoder(nn.Module):
         # Initialize final fully connected layer
         self.output_linear = nn.Linear(embedding_dim, d_model)
 
+        # Initialize an additional transformer layer with a single output position
+        self.compression_transformer = nn.Transformer(
+            d_model=embedding_dim,
+            nhead=nhead,
+            num_encoder_layers=1,
+            num_decoder_layers=0,
+            dim_feedforward=embedding_dim,
+            dropout=dropout
+        )
+        self.compression_transformer_out_pos = nn.Parameter(torch.zeros(embedding_dim))
+
         self.device = 'cpu'
         self.embedding_dim = embedding_dim
 
@@ -60,53 +72,69 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         # Transpose and scale source tensor for transformer
         src = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
+        trg = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
 
-        # Create eos tensor
-        eos_tensor = self.eos_embedding.repeat(1, src.size(1), 1).to(self.device)  # [1, batch_size, embedding_dim]
+        # Create sos and eos tensor
+        sos_tensor = self.sos_embedding.repeat(1, src.size(1), 1).to(self.device)  # [1, batch_size, embedding_dim]
 
         # Apply input encoder and scale the output by square root of d_model
         src_embedding = self.input_encoder(src) * embedding_scaling_factor  # [src_len, batch_size, embedding_dim]
 
-        # Create target from source by adding eos before padding
+        trg_embedding = self.target_encoder(trg) * embedding_scaling_factor
+        # Add sos to beginning of target embedding and eos to end of target embedding
         # [src_len+1, batch_size, embedding_dim]
-        trg_eos = self._insert_eos_before_pad(src_embedding, eos_tensor, src_length)
-        trg_embedding = self.target_encoder(trg_eos) * embedding_scaling_factor
+        trg_eos = self._insert_eos_before_pad(trg_embedding, src_length)
+        trg_sos_eos = torch.cat([sos_tensor, trg_eos], dim=0)  # [src_len+2, batch_size, embedding_dim]
 
         # Apply positional encoding to the source and target embeddings
         src_with_pe = self.pos_encoder(src_embedding)  # [src_len, batch_size, embedding_dim]
-        trg_with_pe = self.pos_decoder(trg_embedding)  # [src_len+1, batch_size, embedding_dim]
+        trg_with_pe = self.pos_decoder(trg_sos_eos)  # [src_len+2, batch_size, embedding_dim] with sos and eos
 
         # Pass the source embeddings through the transformer encoder
         encoder_output = self.transformer_encoder(src_with_pe)  # [src_len, batch_size, embedding_dim]
 
-        # Compute the mean of the encoder output across the sequence length
-        mean_encoder_output = torch.mean(encoder_output, dim=0)  # [batch_size, embedding_dim]
+        # Repeat the output positional encoding for the additional transformer layer
+        compression_transformer_out_pos_batch = self.compression_transformer_out_pos.repeat(encoder_output.size(1), 1)
+
+        # Pass the encoder output through the additional transformer layer
+        additional_transformer_output = self.compression_transformer(
+            encoder_output,
+            torch.unsqueeze(compression_transformer_out_pos_batch, 0)
+        )
 
         # Pass the mean encoder output through the transformer decoder
-        # [src_len+1, batch_size, embedding_dim]
-        decoder_output = self.transformer_decoder(trg_with_pe, mean_encoder_output)
+        # [src_len+2, batch_size, embedding_dim]
+        decoder_output = self.transformer_decoder(trg_with_pe, additional_transformer_output)
 
         # Apply final linear layer to get the output
-        output_spectrogram = self.output_linear(decoder_output).transpose(0, 1)  # [batch_size, src_len+1, d_model]
+        output_spectrogram = self.output_linear(decoder_output).transpose(0, 1)  # [batch_size, src_len+2, d_model]
 
         # Expand the output spectrogram to the original range
         output_spectrogram = torch.exp(output_spectrogram)
 
         return output_spectrogram
 
-    def _insert_eos_before_pad(self, trg, eos, lengths):
+    def _insert_eos_before_pad(self, trg, lengths):
         """
         Insert end of sequence tensors in the input before padding.
 
         Parameters:
-        trg: Tensor of shape [src_len, batch_size, embedding_dim]. The input sequence.
-        eos: Tensor of shape [1, batch_size, embedding_dim]. The end of sequence tensor.
+        trg: Tensor of shape [trg_len, batch_size, embedding_dim]. The input sequence.
         lengths: Tensor of shape [batch_size]. The lengths of the sequences in the batch.
 
         Returns:
-        A tensor of shape [src_len+1, batch_size, embedding_dim] with the eos inserted before padding.
+        A tensor of shape [trg_len+1, batch_size, embedding_dim] with the eos inserted before padding.
         """
-        trg_eos = torch.cat([trg, eos], dim=0)  # [src_len+1, batch_size, embedding_dim]
+        # Adjust the shape of the eos tensor
+        eos = self.eos_embedding.unsqueeze(0).expand(trg.size(1), -1)  # [batch_size, embedding_dim]
+
+        trg_list = []
         for i, length in enumerate(lengths):
-            trg_eos[length, i] = eos[0, i]
+            trg_sequence = trg[:length.item(), i, :]  # Get the non-padded part of the sequence
+            trg_sequence = torch.cat([trg_sequence, eos[i].unsqueeze(0)], dim=0)  # Insert the EOS token
+            if length.item() < trg.size(0):  # If there was padding in the original sequence
+                trg_sequence = torch.cat([trg_sequence, trg[length.item():, i, :]], dim=0)  # Add the padding back in
+            trg_list.append(trg_sequence.unsqueeze(1))  # Add the new sequence to the list of sequences
+        trg_eos = torch.cat(trg_list, dim=1)  # Concatenate all sequences along the batch dimension
+
         return trg_eos

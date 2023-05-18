@@ -4,6 +4,7 @@ import torch.optim as optim
 from data_loader import get_dataloader
 from torch.optim.lr_scheduler import LambdaLR
 from model import TransformerAutoencoder
+from compression_model import TransformerCompressionAutoencoder
 from tqdm import tqdm
 import wandb
 import os
@@ -22,7 +23,7 @@ def validate_epoch(model, dataloader, criterion, device):
             # mel_specgrams shape: (batch_size, T, n_mels)
             mel_specgrams = mel_specgrams.to(device)
             seq_lengths = seq_lengths.to(device)
-            output, _, _, _ = model(mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
+            output = model(mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
             loss = criterion(output, mel_specgrams, seq_lengths)
             epoch_loss += loss.item()
             progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
@@ -43,7 +44,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         seq_lengths = seq_lengths.to(device)
 
         optimizer.zero_grad()
-        output, latent_representation, sos_tensor, eos_tensor = model(
+        output = model(
             mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
         loss = criterion(output, mel_specgrams, seq_lengths)
         loss.backward()
@@ -51,7 +52,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
         epoch_loss += loss.item()
         progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
 
-    return epoch_loss / len(dataloader), latent_representation, sos_tensor, eos_tensor
+    return epoch_loss / len(dataloader)  # , latent_representation, sos_tensor, eos_tensor
 
 
 def loss_fn(y_pred, y_true, seq_lengths):
@@ -99,9 +100,9 @@ def main():
     val_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size,
                                     subset='validation', lite=args.lite)
 
-    model = TransformerAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
-                                   nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
-                                   dropout=args.dropout).to(device)
+    model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
+                                              nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
+                                              dropout=args.dropout).to(device)
     criterion = loss_fn
     optimizer = optim.Adam(model.parameters(), lr=1.0)
 
@@ -112,11 +113,11 @@ def main():
 
     start_epoch = 0
     if args.checkpoint_path:
-        start_epoch, _, _, _, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
+        start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
 
     total_epochs = start_epoch + args.epochs
     for epoch in range(start_epoch, total_epochs):
-        train_loss, latent_representation, sos_tensor, eos_tensor = train_epoch(
+        train_loss = train_epoch(
             model, train_dataloader, criterion, optimizer, device)
         val_loss = validate_epoch(model, val_dataloader, criterion, device)
 
@@ -135,11 +136,11 @@ def main():
             'optimizer_state_dict': optimizer.state_dict(),
             'train_loss': train_loss,
             'val_loss': val_loss,
-            'latent_representation': latent_representation,
-            'sos_tensor': sos_tensor,
-            'eos_tensor': eos_tensor
-        }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
-        # }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
+            # 'latent_representation': latent_representation,
+            # 'sos_tensor': sos_tensor,
+            # 'eos_tensor': eos_tensor
+            # }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
+        }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
 
     # Finish the wandb run
     wandb.finish()

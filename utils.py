@@ -18,8 +18,7 @@ def load_checkpoint(filepath, model, optimizer=None):
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    return checkpoint['epoch'], checkpoint['train_loss'], checkpoint['latent_representation'], \
-        checkpoint['sos_tensor'], checkpoint['eos_tensor']
+    return checkpoint['epoch'], checkpoint['train_loss']
 
 
 def get_arg_parser():

@@ -26,12 +26,12 @@
       "program": "${workspaceFolder}/reconstruct.py",
       "args": [
         "--use_mps",
-        "--n_mels=512",
+        "--n_mels=128",
         "--nhead=1",
-        "--num_layers=6",
-        "--embedding_dim=128",
+        "--num_layers=4",
+        "--embedding_dim=256",
         "--checkpoint_path",
-        "wandb/run-20230516_111649-sk5kddwq/files/checkpoint_11.pt"
+        "checkpoint_11.pt"
       ]
     }
   ]
