@@ -1,7 +1,7 @@
 # compression_model.py
 import torch
 import torch.nn as nn
-from positional_encoding import PositionalEncoding
+from positional_encoding import PositionalEncodingSine
 
 
 class TransformerCompressionAutoencoder(nn.Module):
@@ -36,22 +36,23 @@ class TransformerCompressionAutoencoder(nn.Module):
         )
 
         # Initialize positional encoding
-        self.pos_encoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
-        self.pos_decoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_encoder = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_decoder = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_compression = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
 
         # Initialize final fully connected layer
         self.output_linear = nn.Linear(embedding_dim, d_model)
 
         # Initialize an additional transformer layer with a single output position
-        self.compression_transformer = nn.Transformer(
-            d_model=embedding_dim,
-            nhead=nhead,
-            num_encoder_layers=1,
-            num_decoder_layers=0,
-            dim_feedforward=embedding_dim,
-            dropout=dropout
-        )
-        self.compression_transformer_out_pos = nn.Parameter(torch.zeros(embedding_dim))
+        # self.compression_transformer = nn.Transformer(
+        #     d_model=embedding_dim,
+        #     nhead=nhead,
+        #     num_encoder_layers=1,
+        #     num_decoder_layers=0,
+        #     dim_feedforward=embedding_dim,
+        #     dropout=dropout
+        # )
+        # self.compression_transformer_out_pos = nn.Parameter(torch.zeros(embedding_dim))
 
         self.device = 'cpu'
         self.embedding_dim = embedding_dim
@@ -67,20 +68,23 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         self.device = src.device
 
-        # Scale the embeddings by square root of embedding dimension
+        # Scale the embeddings by square root of embedding dimension as a Python int, not a float
         embedding_scaling_factor = torch.sqrt(torch.tensor(self.embedding_dim).float().to(self.device))
+        embedding_scaling_factor = int(embedding_scaling_factor)
 
         # Transpose and scale source tensor for transformer
-        src = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
-        trg = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
+        scaled_src = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
+        scaled_trg = torch.log1p(src).transpose(0, 1)  # [src_len, batch_size, d_model]
 
         # Create sos and eos tensor
-        sos_tensor = self.sos_embedding.repeat(1, src.size(1), 1).to(self.device)  # [1, batch_size, embedding_dim]
+        sos_tensor = self.sos_embedding.repeat(1, scaled_src.size(1), 1).to(
+            self.device)  # [1, batch_size, embedding_dim]
 
         # Apply input encoder and scale the output by square root of d_model
-        src_embedding = self.input_encoder(src) * embedding_scaling_factor  # [src_len, batch_size, embedding_dim]
+        # [src_len, batch_size, embedding_dim]
+        src_embedding = self.input_encoder(scaled_src) * embedding_scaling_factor
 
-        trg_embedding = self.target_encoder(trg) * embedding_scaling_factor
+        trg_embedding = self.target_encoder(scaled_trg) * embedding_scaling_factor
         # Add sos to beginning of target embedding and eos to end of target embedding
         # [src_len+1, batch_size, embedding_dim]
         trg_eos = self._insert_eos_before_pad(trg_embedding, src_length)
@@ -91,20 +95,18 @@ class TransformerCompressionAutoencoder(nn.Module):
         trg_with_pe = self.pos_decoder(trg_sos_eos)  # [src_len+2, batch_size, embedding_dim] with sos and eos
 
         # Pass the source embeddings through the transformer encoder
-        encoder_output = self.transformer_encoder(src_with_pe)  # [src_len, batch_size, embedding_dim]
+        # Then when you call the transformer encoder:
+        # padding_mask = self._create_padding_mask(seq_lengths=src_length)  # [batch_size, src_len]
+        encoder_output = self.transformer_encoder(
+            src_with_pe)  # , src_key_padding_mask=padding_mask)  # [src_len, batch_size, embedding_dim]
 
-        # Repeat the output positional encoding for the additional transformer layer
-        compression_transformer_out_pos_batch = self.compression_transformer_out_pos.repeat(encoder_output.size(1), 1)
-
-        # Pass the encoder output through the additional transformer layer
-        additional_transformer_output = self.compression_transformer(
-            encoder_output,
-            torch.unsqueeze(compression_transformer_out_pos_batch, 0)
-        )
+        # Pass the mean encoder output through the transformer decoder
+        compressed_vector = encoder_output.mean(dim=0).unsqueeze(0)  # [1, batch_size, embedding_dim]
+        # compressed_vector = self.pos_compression(mean_encoder_output)  # [1, batch_size, embedding_dim]
 
         # Pass the mean encoder output through the transformer decoder
         # [src_len+2, batch_size, embedding_dim]
-        decoder_output = self.transformer_decoder(trg_with_pe, additional_transformer_output)
+        decoder_output = self.transformer_decoder(trg_with_pe, compressed_vector)
 
         # Apply final linear layer to get the output
         output_spectrogram = self.output_linear(decoder_output).transpose(0, 1)  # [batch_size, src_len+2, d_model]
@@ -138,3 +140,19 @@ class TransformerCompressionAutoencoder(nn.Module):
         trg_eos = torch.cat(trg_list, dim=1)  # Concatenate all sequences along the batch dimension
 
         return trg_eos
+
+    def _create_padding_mask(self, seq_lengths):
+        """
+        Creates a mask from the sequence lengths.
+
+        Parameters:
+        seq_lengths (torch.Tensor): tensor containing sequence lengths of shape (batch_size)
+
+        Returns:
+        mask (torch.Tensor): mask of shape (batch_size, max_len) where True indicates a padding token
+        """
+        batch_size = seq_lengths.size(0)
+        max_len = seq_lengths.max().item()
+        mask = torch.arange(max_len).expand(batch_size, max_len).to(seq_lengths.device)
+        mask = mask >= seq_lengths.unsqueeze(1)
+        return mask

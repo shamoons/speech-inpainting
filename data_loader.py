@@ -63,4 +63,4 @@ def get_dataloader(root_dir, n_mels, batch_size, subset='training', lite=None):
             dataset = torch.utils.data.Subset(dataset, range(lite // 4))
 
     # Return DataLoader with appropriate parameters
-    return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=pad_collate)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=pad_collate)

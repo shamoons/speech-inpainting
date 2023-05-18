@@ -3,7 +3,6 @@ import torch
 import matplotlib.pyplot as plt
 import torchaudio
 from data_loader import get_dataloader
-from model import TransformerAutoencoder
 from compression_model import TransformerCompressionAutoencoder
 
 from utils import load_checkpoint, get_arg_parser
@@ -35,7 +34,8 @@ def main():
     model.eval()
     with torch.no_grad():
         for _, (mel_specgrams, seq_lengths) in enumerate(dataloader):
-            mel_specgrams = mel_specgrams[0].unsqueeze(0).to(device)  # shape: (batch_size, T, n_mels)
+            mel_specgrams = mel_specgrams.to(device)
+            seq_lengths = seq_lengths.to(device)
 
             # latent_representation = latent_representation.transpose(0, 1)  # shape: (batch_size, T, d_model)
             # latent_representation = latent_representation[0].unsqueeze(0)  # shape: (batch_size, T, d_model)

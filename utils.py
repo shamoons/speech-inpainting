@@ -31,6 +31,7 @@ def get_arg_parser():
     parser.add_argument('--use_cuda', action=argparse.BooleanOptionalAction, help='Use CUDA if available')
     parser.add_argument('--use_mps', action=argparse.BooleanOptionalAction, help='Use MPS if available')
     parser.add_argument('--nhead', type=int, default=2, help='Number of attention heads')
+    parser.add_argument('--base_lr', type=float, default=0.1, help='Base learning rate')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of encoder/decoder layers')
     parser.add_argument('--embedding_dim', type=int, default=256,
                         help='Dimension of the the input and output embeddings')

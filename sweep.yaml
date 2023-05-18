@@ -11,20 +11,20 @@ command:
 parameters:
   n_mels:
     distribution: categorical
-    values: [256, 512, 1024]
+    values: [40, 80, 160, 320]
   nhead:
     distribution: categorical
     values: [1, 2, 4, 8]
   num_layers:
     values: [2, 4, 6]
   epochs:
-    value: 40
+    value: 50
   dropout:
-    values: [0.1, 0.2, 0.3, 0.4, 0.5]
+    values: [0.1, 0.5]
   batch_size:
-    value: 256
-  lite:
-    value: 8000
+    value: 512
+  base_lr:
+    values: [1, 0.1, 0.001]
   embedding_dim:
     distribution: categorical
     values: [16, 32, 64, 128, 256]

@@ -3,7 +3,6 @@ import torch
 import torch.optim as optim
 from data_loader import get_dataloader
 from torch.optim.lr_scheduler import LambdaLR
-from model import TransformerAutoencoder
 from compression_model import TransformerCompressionAutoencoder
 from tqdm import tqdm
 import wandb
@@ -56,7 +55,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
 
 
 def loss_fn(y_pred, y_true, seq_lengths):
-    # y_pred shape: (batch_size, T + 1, n_mels)
+    # y_pred shape: (batch_size, T + 2, n_mels)
     # y_true shape: (batch_size, T, n_mels)
     # seq_lengths shape: (batch_size)
 
@@ -67,10 +66,16 @@ def loss_fn(y_pred, y_true, seq_lengths):
 
     # For each item in the batch
     for i in range(batch_size):
+        # Remove the first timestep (i.e., the SOS timestep)
+        without_sos = y_pred[i, 1:]  # Shape: (T + 1, n_mels)
+
         # Remove the timestep at seq_lengths[i] (i.e., the EOS timestep)
-        pre_eos = y_pred[i, :seq_lengths[i]]
-        post_eos = y_pred[i, seq_lengths[i] + 1:]
+        pre_eos = without_sos[:seq_lengths[i]]
+        post_eos = without_sos[seq_lengths[i] + 1:]
+
+        # Concatenate pre_eos and post_eos
         masked = torch.cat((pre_eos, post_eos), dim=0)
+
         y_pred_masked_list.append(masked)
 
     # Stack the processed sequences back into a tensor
@@ -104,10 +109,10 @@ def main():
                                               nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
                                               dropout=args.dropout).to(device)
     criterion = loss_fn
-    optimizer = optim.Adam(model.parameters(), lr=1.0)
+    optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
 
-    def lr_lambda(epoch): return args.n_mels**-0.5 * min((epoch + 1)
-                                                         ** -0.5, (epoch + 1) * (args.epochs // 20)**-1.5)
+    def lr_lambda(epoch): return args.embedding_dim**-0.5 * min((epoch + 1)
+                                                                ** -0.5, (epoch + 1) * (args.epochs // 20)**-1.5)
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
@@ -129,18 +134,19 @@ def main():
         # Adjust learning rate based on validation loss
         scheduler.step()
 
-        # Saving model and optimizer state
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'train_loss': train_loss,
-            'val_loss': val_loss,
-            # 'latent_representation': latent_representation,
-            # 'sos_tensor': sos_tensor,
-            # 'eos_tensor': eos_tensor
-            # }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
-        }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
+        # Saving model and optimizer state every 10 epochs
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_loss': train_loss,
+                'val_loss': val_loss,
+                # 'latent_representation': latent_representation,
+                # 'sos_tensor': sos_tensor,
+                # 'eos_tensor': eos_tensor
+            }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
+            # }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
 
     # Finish the wandb run
     wandb.finish()

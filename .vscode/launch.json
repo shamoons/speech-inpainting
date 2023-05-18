@@ -29,9 +29,9 @@
         "--n_mels=128",
         "--nhead=1",
         "--num_layers=4",
-        "--embedding_dim=256",
-        "--checkpoint_path",
-        "checkpoint_11.pt"
+        "--embedding_dim=64",
+        // "--checkpoint_path",
+        // "checkpoint_4.pt"
       ]
     }
   ]
