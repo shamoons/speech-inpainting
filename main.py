@@ -100,6 +100,7 @@ def main():
     # Initialize wandb
     wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
     print("wandb dir:", wandb.run.dir)
+    print(f"Using Layer Normalization: {args.use_layer_norm}")
 
     train_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
     val_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size,
@@ -109,10 +110,14 @@ def main():
                                               nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
                                               dropout=args.dropout).to(device)
     criterion = loss_fn
+
+    total_steps = len(train_dataloader) * args.epochs  # assuming dataloader is your data loader
+    warmup_steps = int(total_steps * 0.5)  # 5% of total steps
+
     optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
 
-    def lr_lambda(epoch): return args.embedding_dim**-0.5 * min((epoch + 1)
-                                                                ** -0.5, (epoch + 1) * (args.epochs // 20)**-1.5)
+    def lr_lambda(step):
+        return args.embedding_dim**-0.5 * min((step + 1) ** -0.5, (step + 1) * warmup_steps**-1.5)
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 

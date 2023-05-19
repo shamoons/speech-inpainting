@@ -1,11 +1,11 @@
 # compression_model.py
 import torch
 import torch.nn as nn
-from positional_encoding import PositionalEncodingSine
+from positional_encoding import PositionalEncoding
 
 
 class TransformerCompressionAutoencoder(nn.Module):
-    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, dropout=0.0):
+    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, use_layer_norm=False, dropout=0.0):
         """
         Initialize the Transformer autoencoder.
 
@@ -36,12 +36,17 @@ class TransformerCompressionAutoencoder(nn.Module):
         )
 
         # Initialize positional encoding
-        self.pos_encoder = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
-        self.pos_decoder = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
-        self.pos_compression = PositionalEncodingSine(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_encoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
+        self.pos_decoder = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
+        # self.pos_compression = PositionalEncoding(embedding_dim, max_len=max_len, dropout=dropout)
 
         # Initialize final fully connected layer
         self.output_linear = nn.Linear(embedding_dim, d_model)
+
+        # Initialize LayerNorm
+        self.layer_norm_enc_input = nn.LayerNorm(embedding_dim)
+        self.layer_norm_enc_output = nn.LayerNorm(embedding_dim)
+        self.layer_norm_dec_input = nn.LayerNorm(embedding_dim)
 
         # Initialize an additional transformer layer with a single output position
         # self.compression_transformer = nn.Transformer(
@@ -56,6 +61,7 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         self.device = 'cpu'
         self.embedding_dim = embedding_dim
+        self.use_layer_norm = use_layer_norm
 
     def forward(self, src, src_length):
         """
@@ -94,19 +100,25 @@ class TransformerCompressionAutoencoder(nn.Module):
         src_with_pe = self.pos_encoder(src_embedding)  # [src_len, batch_size, embedding_dim]
         trg_with_pe = self.pos_decoder(trg_sos_eos)  # [src_len+2, batch_size, embedding_dim] with sos and eos
 
+        # Apply LayerNorm before transformer encoder and decoder
+        src_layer_norm = self.layer_norm_enc_input(src_with_pe) if self.use_layer_norm else src_with_pe
+        trg_layer_norm = self.layer_norm_dec_input(trg_with_pe) if self.use_layer_norm else trg_with_pe
+
         # Pass the source embeddings through the transformer encoder
         # Then when you call the transformer encoder:
         # padding_mask = self._create_padding_mask(seq_lengths=src_length)  # [batch_size, src_len]
         encoder_output = self.transformer_encoder(
-            src_with_pe)  # , src_key_padding_mask=padding_mask)  # [src_len, batch_size, embedding_dim]
+            src_layer_norm)  # , src_key_padding_mask=padding_mask)  # [src_len, batch_size, embedding_dim]
+
+        encoder_output_norm = self.self.layer_norm_enc_output(encoder_output) if self.use_layer_norm else encoder_output
 
         # Pass the mean encoder output through the transformer decoder
-        compressed_vector = encoder_output.mean(dim=0).unsqueeze(0)  # [1, batch_size, embedding_dim]
+        compressed_vector = encoder_output_norm.mean(dim=0).unsqueeze(0)  # [1, batch_size, embedding_dim]
         # compressed_vector = self.pos_compression(mean_encoder_output)  # [1, batch_size, embedding_dim]
 
         # Pass the mean encoder output through the transformer decoder
         # [src_len+2, batch_size, embedding_dim]
-        decoder_output = self.transformer_decoder(trg_with_pe, compressed_vector)
+        decoder_output = self.transformer_decoder(trg_layer_norm, compressed_vector)
 
         # Apply final linear layer to get the output
         output_spectrogram = self.output_linear(decoder_output).transpose(0, 1)  # [batch_size, src_len+2, d_model]

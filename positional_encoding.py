@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 
 
-class PositionalEncoding(nn.Module):
+class PositionalEncodingLearned(nn.Module):
     def __init__(self, embedding_dim, dropout=0.1, max_len=5000):
-        super(PositionalEncoding, self).__init__()
+        super(PositionalEncodingLearned, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
         # Initialize the positional encodings as a learnable parameter
@@ -23,9 +23,9 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-class PositionalEncodingSine(nn.Module):
+class PositionalEncoding(nn.Module):
     def __init__(self, embedding_dim, dropout=0.1, max_len=5000):
-        super(PositionalEncodingSine, self).__init__()
+        super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
         # Initialize the positional encodings
