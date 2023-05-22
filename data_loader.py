@@ -60,7 +60,9 @@ def get_dataloader(root_dir, n_mels, batch_size, subset='training', lite=None):
         if subset == 'training':
             dataset = torch.utils.data.Subset(dataset, range(lite))
         elif subset == 'validation':
-            dataset = torch.utils.data.Subset(dataset, range(lite // 4))
+            lite_val = lite // 4
+            lite_val = min(lite_val, len(dataset))  # Make sure not to exceed total dataset size
+            dataset = torch.utils.data.Subset(dataset, range(lite_val))
 
     # Return DataLoader with appropriate parameters
     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, collate_fn=pad_collate)

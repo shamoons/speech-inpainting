@@ -110,6 +110,7 @@ def main():
 
     model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
                                               nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
+                                              dim_feedforward=args.dim_feedforward,
                                               dropout=args.dropout).to(device)
     criterion = loss_fn
 

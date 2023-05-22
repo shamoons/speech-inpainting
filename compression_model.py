@@ -5,7 +5,8 @@ from positional_encoding import PositionalEncoding
 
 
 class TransformerCompressionAutoencoder(nn.Module):
-    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, dim_feedforward, use_layer_norm=False, dropout=0.0):
+    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim,
+                 dim_feedforward, use_layer_norm=False, dropout=0.0):
         """
         Initialize the Transformer autoencoder.
 
@@ -29,14 +30,14 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         # Initialize transformer encoder and decoder layers
         self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout),
-            num_layers=num_layers,
-            dim_feedforward=dim_feedforward
+            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead,
+                                       dropout=dropout, dim_feedforward=dim_feedforward),
+            num_layers=num_layers
         )
         self.transformer_decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout),
-            num_layers=num_layers,
-            dim_feedforward=dim_feedforward
+            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=nhead,
+                                       dropout=dropout, dim_feedforward=dim_feedforward),
+            num_layers=num_layers
         )
 
         # Initialize positional encoding
