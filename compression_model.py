@@ -5,7 +5,7 @@ from positional_encoding import PositionalEncoding
 
 
 class TransformerCompressionAutoencoder(nn.Module):
-    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, use_layer_norm=False, dropout=0.0):
+    def __init__(self, d_model, num_layers, nhead, max_len, embedding_dim, dim_feedforward, use_layer_norm=False, dropout=0.0):
         """
         Initialize the Transformer autoencoder.
 
@@ -29,10 +29,14 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         # Initialize transformer encoder and decoder layers
         self.transformer_encoder = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout), num_layers=num_layers
+            nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout),
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward
         )
         self.transformer_decoder = nn.TransformerDecoder(
-            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout), num_layers=num_layers
+            nn.TransformerDecoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout),
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward
         )
 
         # Initialize positional encoding
@@ -106,9 +110,9 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         # Pass the source embeddings through the transformer encoder
         # Then when you call the transformer encoder:
-        # padding_mask = self._create_padding_mask(seq_lengths=src_length)  # [batch_size, src_len]
+        padding_mask = self._create_padding_mask(seq_lengths=src_length)  # [batch_size, src_len]
         encoder_output = self.transformer_encoder(
-            src_layer_norm)  # , src_key_padding_mask=padding_mask)  # [src_len, batch_size, embedding_dim]
+            src_layer_norm, src_key_padding_mask=padding_mask)  # [src_len, batch_size, embedding_dim]
 
         encoder_output_norm = self.self.layer_norm_enc_output(encoder_output) if self.use_layer_norm else encoder_output
 

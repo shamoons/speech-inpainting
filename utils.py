@@ -38,5 +38,7 @@ def get_arg_parser():
     parser.add_argument('--embedding_dim', type=int, default=256,
                         help='Dimension of the the input and output embeddings')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout probability')
+    parser.add_argument('--warmup_steps', type=float, default=0.05,
+                        help='Percent of total steps to warmup for learning rate scheduler')
     parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
     return parser

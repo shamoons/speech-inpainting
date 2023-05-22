@@ -10,25 +10,24 @@ command:
   - --use_mps
 parameters:
   n_mels:
-    distribution: categorical
-    values: [80, 160]
+    values: [80, 100]
   nhead:
-    distribution: categorical
-    values: [4, 8]
+    values: [2, 4]
   num_layers:
-    values: [2, 4, 6]
+    values: [2, 4]
   epochs:
     value: 50
   dropout:
-    values: [0.1, 0.5]
+    value: 0.0
   batch_size:
     value: 256
   base_lr:
-    values: [0.1, 0.001, 0.0001]
+    values: [0.1, 0.05]
   embedding_dim:
-    distribution: categorical
-    values: [128, 256]
+    value: 128
   lite:
-    value: 20000
+    value: 50000
   use_layer_norm:
-    values: [True, False]
+    value: False
+  warmup_steps:
+    values: [0.05, 0.1]
