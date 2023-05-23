@@ -10,11 +10,11 @@ command:
   - --use_mps
 parameters:
   n_mels:
-    values: [80, 100]
+    value: 80
   nhead:
-    values: [2, 4]
+    value: 2
   num_layers:
-    values: [2, 4]
+    value: 2
   epochs:
     value: 50
   dropout:
@@ -22,12 +22,12 @@ parameters:
   batch_size:
     value: 256
   base_lr:
-    values: [0.1, 0.05]
+    values: [0.5, 0.1, 0.05]
   embedding_dim:
-    value: 128
-  lite:
-    value: 50000
+    values: [64, 128]
   use_layer_norm:
     value: False
   warmup_steps:
     values: [0.05, 0.1]
+  dim_feedforward:
+    values: [2048, 4096]

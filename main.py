@@ -116,14 +116,15 @@ def main():
 
     total_steps = len(train_dataloader) * args.epochs  # assuming dataloader is your data loader
     warmup_steps = int(total_steps * args.warmup_steps)  # % of total steps
+    print(f"Total steps: {total_steps}, warmup steps: {warmup_steps}")
 
     optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
 
     def lr_lambda(step):
         if step < warmup_steps:
-            return args.base_lr * (step + 1) / warmup_steps
+            return (args.embedding_dim ** -0.5) * (step + 1) * warmup_steps ** -1.5
         else:
-            return args.base_lr * warmup_steps**0.5 * min((step + 1)**-0.5, (step + 1 - warmup_steps) * (warmup_steps * 2)**-1.5)
+            return (args.embedding_dim ** -0.5) * min((step + 1) ** -0.5, warmup_steps ** -1.5)
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
