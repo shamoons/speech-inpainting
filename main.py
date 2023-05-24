@@ -121,10 +121,10 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
 
     def lr_lambda(step):
-        if step < warmup_steps:
-            return (args.embedding_dim ** -0.5) * (step + 1) * warmup_steps ** -1.5
-        else:
-            return (args.embedding_dim ** -0.5) * min((step + 1) ** -0.5, warmup_steps ** -1.5)
+
+        lr = args.base_lr * min((step + 1)
+                                ** -0.5, (step + 1) * warmup_steps ** -1.5)
+        return lr
 
     scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 

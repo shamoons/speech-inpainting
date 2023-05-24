@@ -12,7 +12,7 @@ parameters:
   n_mels:
     values: [80, 160]
   nhead:
-    values: [2, 4, 8]
+    values: [2, 4]
   num_layers:
     values: [2, 4, 6]
   epochs:
@@ -22,7 +22,7 @@ parameters:
   batch_size:
     value: 512
   base_lr:
-    values: [0.5, 0.1, 0.05]
+    values: [0.1, 0.01, 0.001]
   embedding_dim:
     values: [64, 128, 256]
   use_layer_norm:

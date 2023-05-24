@@ -68,6 +68,8 @@ class TransformerCompressionAutoencoder(nn.Module):
         self.embedding_dim = embedding_dim
         self.use_layer_norm = use_layer_norm
 
+        self.dropout = nn.Dropout(dropout)
+
     def forward(self, src, src_length):
         """
         Forward pass of the Transformer Compression Autoencoder.
@@ -105,6 +107,9 @@ class TransformerCompressionAutoencoder(nn.Module):
         src_with_pe = self.pos_encoder(src_embedding)  # [src_len, batch_size, embedding_dim]
         trg_with_pe = self.pos_decoder(trg_sos_eos)  # [src_len+2, batch_size, embedding_dim] with sos and eos
 
+        src_with_pe = self.dropout(src_with_pe)
+        trg_with_pe = self.dropout(trg_with_pe)
+
         # Apply LayerNorm before transformer encoder and decoder
         src_layer_norm = self.layer_norm_enc_input(src_with_pe) if self.use_layer_norm else src_with_pe
         trg_layer_norm = self.layer_norm_dec_input(trg_with_pe) if self.use_layer_norm else trg_with_pe
@@ -119,11 +124,13 @@ class TransformerCompressionAutoencoder(nn.Module):
 
         # Pass the mean encoder output through the transformer decoder
         compressed_vector = encoder_output_norm.mean(dim=0).unsqueeze(0)  # [1, batch_size, embedding_dim]
-        # compressed_vector = self.pos_compression(mean_encoder_output)  # [1, batch_size, embedding_dim]
+
+        compressed_vector = self.dropout(compressed_vector)
 
         # Pass the mean encoder output through the transformer decoder
         # [src_len+2, batch_size, embedding_dim]
         decoder_output = self.transformer_decoder(trg_layer_norm, compressed_vector)
+        decoder_output = self.dropout(decoder_output)
 
         # Apply final linear layer to get the output
         output_spectrogram = self.output_linear(decoder_output).transpose(0, 1)  # [batch_size, src_len+2, d_model]
