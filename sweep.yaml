@@ -16,13 +16,13 @@ parameters:
   num_layers:
     values: [2, 4, 6]
   epochs:
-    value: 100
+    value: 200
   dropout:
     values: [0.0, 0.25, 0.5]
   batch_size:
-    value: 512
+    value: 256
   base_lr:
-    values: [0.1, 0.01, 0.001]
+    values: [0.1, 0.01, 0.001, 0.0001]
   embedding_dim:
     values: [64, 128, 256]
   use_layer_norm:

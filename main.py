@@ -104,9 +104,9 @@ def main():
     print("wandb dir:", wandb.run.dir)
     print(f"Using Layer Normalization: {args.use_layer_norm}")
 
-    train_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
-    val_dataloader = get_dataloader(args.data_path, args.n_mels, args.batch_size,
-                                    subset='validation', lite=args.lite)
+    train_dataloader, train_dataset_size = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
+    val_dataloader, val_dataset_size = get_dataloader(args.data_path, args.n_mels, args.batch_size,
+                                                      subset='validation', lite=args.lite)
 
     model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
                                               nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
@@ -117,6 +117,7 @@ def main():
     total_steps = len(train_dataloader) * args.epochs  # assuming dataloader is your data loader
     warmup_steps = int(args.epochs * args.warmup_steps)  # % of total steps
     print(f"Total steps: {total_steps}, warmup steps: {warmup_steps}")
+    print(f"Training dataset size: {train_dataset_size}, validation dataset size: {val_dataset_size}")
 
     optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
 
