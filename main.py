@@ -115,7 +115,7 @@ def main():
     criterion = loss_fn
 
     total_steps = len(train_dataloader) * args.epochs  # assuming dataloader is your data loader
-    warmup_steps = int(total_steps * args.warmup_steps)  # % of total steps
+    warmup_steps = int(args.epochs * args.warmup_steps)  # % of total steps
     print(f"Total steps: {total_steps}, warmup steps: {warmup_steps}")
 
     optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
