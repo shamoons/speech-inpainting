@@ -10,19 +10,19 @@ command:
   - --use_cuda
 parameters:
   n_mels:
-    values: [80, 160]
+    values: [100, 160]
   nhead:
     values: [2, 4]
   num_layers:
-    values: [2, 4, 6]
+    values: [2, 4]
   epochs:
-    value: 200
+    value: 500
   dropout:
     values: [0.0, 0.25, 0.5]
   batch_size:
-    value: 256
+    value: 2048
   base_lr:
-    values: [0.1, 0.01, 0.001, 0.0001]
+    values: [0.1, 0.01]
   embedding_dim:
     values: [64, 128, 256]
   use_layer_norm:
@@ -31,3 +31,5 @@ parameters:
     values: [0.05, 0.1]
   dim_feedforward:
     values: [1024, 2048, 4096]
+  noise_factor:
+    values: [0, 0.1, 0.01, 0.001]

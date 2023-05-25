@@ -42,4 +42,5 @@ def get_arg_parser():
     parser.add_argument('--warmup_steps', type=float, default=0.05,
                         help='Percent of total steps to warmup for learning rate scheduler')
     parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
+    parser.add_argument('--noise_factor', type=float, default=0.005, help='Noise factor for data augmentation')
     return parser

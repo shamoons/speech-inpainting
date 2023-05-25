@@ -20,11 +20,12 @@ def validate_epoch(model, dataloader, criterion, device):
     progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Validate', leave=False)
 
     with torch.no_grad():
-        for batch_idx, (mel_specgrams, seq_lengths) in progress_bar:
+        for batch_idx, (mel_specgrams, noisy_mel_specgrams, seq_lengths) in progress_bar:
             # mel_specgrams shape: (batch_size, T, n_mels)
             mel_specgrams = mel_specgrams.to(device)
+            noisy_mel_specgrams = noisy_mel_specgrams.to(device)
             seq_lengths = seq_lengths.to(device)
-            output = model(mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
+            output = model(noisy_mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
             loss = criterion(output, mel_specgrams, seq_lengths)
             epoch_loss += loss.item()
             progress_bar.set_postfix({'loss': epoch_loss / (batch_idx + 1)})
@@ -39,14 +40,15 @@ def train_epoch(model, dataloader, criterion, optimizer, device):
     # Use tqdm for progress bar
     progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc='Train', leave=False)
 
-    for batch_idx, (mel_specgrams, seq_lengths) in progress_bar:
+    for batch_idx, (mel_specgrams, noisy_mel_specgrams, seq_lengths) in progress_bar:
         # mel_specgrams shape: (batch_size, T, n_mels)
         mel_specgrams = mel_specgrams.to(device)
+        noisy_mel_specgrams = noisy_mel_specgrams.to(device)
         seq_lengths = seq_lengths.to(device)
 
         optimizer.zero_grad()
         output = model(
-            mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
+            noisy_mel_specgrams, seq_lengths)  # Output shape: (batch_size, T, n_mels)
         loss = criterion(output, mel_specgrams, seq_lengths)
         loss.backward()
         optimizer.step()
@@ -86,83 +88,98 @@ def loss_fn(y_pred, y_true, seq_lengths):
     return torch.nn.MSELoss()(y_pred_masked, y_true)
 
 
+def run_main(args):
+    batch_size = args.batch_size
+    try:
+
+        # Set device
+        device = "cpu"
+        if args.use_mps and torch.backends.mps.is_available():
+            device = "mps"
+        elif args.use_cuda and torch.cuda.is_available():
+            device = "cuda"
+
+        print(f"Using device: {device}")
+        device = torch.device(device)
+
+        # Initialize wandb
+        wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
+        print("wandb dir:", wandb.run.dir)
+        print(f"Using Layer Normalization: {args.use_layer_norm}")
+
+        train_dataloader, train_dataset_size = get_dataloader(
+            args.data_path, args.n_mels, batch_size, lite=args.lite, noise_factor=args.noise_factor)
+        val_dataloader, val_dataset_size = get_dataloader(args.data_path, args.n_mels, batch_size,
+                                                          subset='validation', lite=args.lite,
+                                                          noise_factor=args.noise_factor)
+
+        model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
+                                                  nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
+                                                  dim_feedforward=args.dim_feedforward,
+                                                  dropout=args.dropout).to(device)
+        criterion = loss_fn
+
+        warmup_steps = int(args.epochs * args.warmup_steps)  # % of total steps
+        print(f"Training dataset size: {train_dataset_size}, validation dataset size: {val_dataset_size}")
+
+        optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
+
+        def lr_lambda(step):
+
+            lr = args.base_lr * min((step + 1)
+                                    ** -0.5, (step + 1) * warmup_steps ** -1.5)
+            return lr
+
+        scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+        start_epoch = 0
+        if args.checkpoint_path:
+            start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
+
+        total_epochs = start_epoch + args.epochs
+        for epoch in range(start_epoch, total_epochs):
+            train_loss = train_epoch(
+                model, train_dataloader, criterion, optimizer, device)
+            val_loss = validate_epoch(model, val_dataloader, criterion, device)
+
+            # Logging losses to console and to wandb
+            print(
+                f"Epoch {epoch + 1}/{total_epochs}\tTrain Loss: {train_loss}\tVal Loss: {val_loss}\tLearning Rate: {scheduler.get_last_lr()[0]}")
+            wandb_run.log({"train_loss": train_loss, "val_loss": val_loss, "learning_rate": scheduler.get_last_lr()[0]})
+
+            # Adjust learning rate based on validation loss
+            scheduler.step()
+
+            # Saving model and optimizer state every 10 epochs
+            if (epoch + 1) % 10 == 0:
+                save_checkpoint({
+                    'epoch': epoch + 1,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'train_loss': train_loss,
+                    'val_loss': val_loss,
+                    # 'latent_representation': latent_representation,
+                    # 'sos_tensor': sos_tensor,
+                    # 'eos_tensor': eos_tensor
+                }, os.path.join(wandb.run.dir, f"./checkpoint.pt"))
+                # }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
+
+        # Finish the wandb run
+        wandb.finish()
+    except RuntimeError as e:
+        # If we hit a CUDA out of memory error, cut the batch size in half and retry
+        if 'out of memory' in str(e):
+            print(f'Batch size of {batch_size} was too large, trying with {batch_size // 2}...')
+            args.batch_size = batch_size // 2
+            return run_main(args)
+        else:
+            # If it's a different kind of RuntimeError, raise it.
+            raise e
+
+
 def main():
     args = get_arg_parser().parse_args()
-
-    # Set device
-    device = "cpu"
-    if args.use_mps and torch.backends.mps.is_available():
-        device = "mps"
-    elif args.use_cuda and torch.cuda.is_available():
-        device = "cuda"
-
-    print(f"Using device: {device}")
-    device = torch.device(device)
-
-    # Initialize wandb
-    wandb_run = wandb.init(project="speech-inpainting", config=args.__dict__)
-    print("wandb dir:", wandb.run.dir)
-    print(f"Using Layer Normalization: {args.use_layer_norm}")
-
-    train_dataloader, train_dataset_size = get_dataloader(args.data_path, args.n_mels, args.batch_size, lite=args.lite)
-    val_dataloader, val_dataset_size = get_dataloader(args.data_path, args.n_mels, args.batch_size,
-                                                      subset='validation', lite=args.lite)
-
-    model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
-                                              nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,
-                                              dim_feedforward=args.dim_feedforward,
-                                              dropout=args.dropout).to(device)
-    criterion = loss_fn
-
-    total_steps = len(train_dataloader) * args.epochs  # assuming dataloader is your data loader
-    warmup_steps = int(args.epochs * args.warmup_steps)  # % of total steps
-    print(f"Total steps: {total_steps}, warmup steps: {warmup_steps}")
-    print(f"Training dataset size: {train_dataset_size}, validation dataset size: {val_dataset_size}")
-
-    optimizer = optim.Adam(model.parameters(), lr=args.base_lr)
-
-    def lr_lambda(step):
-
-        lr = args.base_lr * min((step + 1)
-                                ** -0.5, (step + 1) * warmup_steps ** -1.5)
-        return lr
-
-    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
-
-    start_epoch = 0
-    if args.checkpoint_path:
-        start_epoch, _ = load_checkpoint(args.checkpoint_path, model, optimizer)
-
-    total_epochs = start_epoch + args.epochs
-    for epoch in range(start_epoch, total_epochs):
-        train_loss = train_epoch(
-            model, train_dataloader, criterion, optimizer, device)
-        val_loss = validate_epoch(model, val_dataloader, criterion, device)
-
-        # Logging losses to console and to wandb
-        print(
-            f"Epoch {epoch + 1}/{total_epochs}\tTrain Loss: {train_loss}\tVal Loss: {val_loss}\tLearning Rate: {scheduler.get_last_lr()[0]}")
-        wandb_run.log({"train_loss": train_loss, "val_loss": val_loss, "learning_rate": scheduler.get_last_lr()[0]})
-
-        # Adjust learning rate based on validation loss
-        scheduler.step()
-
-        # Saving model and optimizer state every 10 epochs
-        if (epoch + 1) % 10 == 0:
-            save_checkpoint({
-                'epoch': epoch + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'train_loss': train_loss,
-                'val_loss': val_loss,
-                # 'latent_representation': latent_representation,
-                # 'sos_tensor': sos_tensor,
-                # 'eos_tensor': eos_tensor
-            }, os.path.join(wandb.run.dir, f"./checkpoint_{epoch + 1}.pt"))
-            # }, os.path.join("./", f"checkpoint_{epoch + 1}.pt"))
-
-    # Finish the wandb run
-    wandb.finish()
+    run_main(args)
 
 
 if __name__ == "__main__":
