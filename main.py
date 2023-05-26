@@ -1,5 +1,6 @@
 # main.py
 import torch
+import time
 import torch.optim as optim
 from data_loader import get_dataloader
 from torch.optim.lr_scheduler import LambdaLR
@@ -139,7 +140,7 @@ def run_main(args):
         total_epochs = start_epoch + args.epochs
         for epoch in range(start_epoch, total_epochs):
             train_loss = train_epoch(
-                model, train_dataloader, criterion, optimizer, device)
+                model, train_dataloader, criterion, optimizer, dwandb agent shamoons/speech-inpainting/m2ecz7hfevice)
             val_loss = validate_epoch(model, val_dataloader, criterion, device)
 
             # Logging losses to console and to wandb
@@ -171,6 +172,7 @@ def run_main(args):
         if 'out of memory' in str(e):
             print(f'Batch size of {batch_size} was too large, trying with {batch_size // 2}...')
             args.batch_size = batch_size // 2
+            time.sleep(10)
             return run_main(args)
         else:
             # If it's a different kind of RuntimeError, raise it.
