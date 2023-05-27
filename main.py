@@ -140,7 +140,7 @@ def run_main(args):
         total_epochs = start_epoch + args.epochs
         for epoch in range(start_epoch, total_epochs):
             train_loss = train_epoch(
-                model, train_dataloader, criterion, optimizer, dwandb agent shamoons/speech-inpainting/m2ecz7hfevice)
+                model, train_dataloader, criterion, optimizer, device)
             val_loss = validate_epoch(model, val_dataloader, criterion, device)
 
             # Logging losses to console and to wandb
