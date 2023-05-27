@@ -12,11 +12,11 @@ parameters:
   n_mels:
     values: [100, 160]
   nhead:
-    values: 2
+    value: 2
   num_layers:
-    values: 4
+    value: 4
   epochs:
-    value: 500
+    value: 250
   dropout:
     values: [0.0, 0.1]
   batch_size:
