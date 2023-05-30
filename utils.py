@@ -43,4 +43,6 @@ def get_arg_parser():
                         help='Percent of total steps to warmup for learning rate scheduler')
     parser.add_argument('--lite', type=int, default=None, help='Lite mode for debugging')
     parser.add_argument('--noise_factor', type=float, default=0.005, help='Noise factor for data augmentation')
+    parser.add_argument('--noise_to_spec', default=False, type=lambda x: (str(x).lower() == 'true'),
+                        help='Add noise to spectrogram')
     return parser
