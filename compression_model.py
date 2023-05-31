@@ -107,9 +107,6 @@ class TransformerCompressionAutoencoder(nn.Module):
         src_with_pe = self.pos_encoder(src_embedding)  # [src_len, batch_size, embedding_dim]
         trg_with_pe = self.pos_decoder(trg_sos_eos)  # [src_len+2, batch_size, embedding_dim] with sos and eos
 
-        src_with_pe = self.dropout(src_with_pe)
-        trg_with_pe = self.dropout(trg_with_pe)
-
         # Apply LayerNorm before transformer encoder and decoder
         src_layer_norm = self.layer_norm_enc_input(src_with_pe) if self.use_layer_norm else src_with_pe
         trg_layer_norm = self.layer_norm_dec_input(trg_with_pe) if self.use_layer_norm else trg_with_pe
