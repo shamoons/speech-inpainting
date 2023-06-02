@@ -1,3 +1,4 @@
+# data_loader.py
 import torch
 import torchaudio
 from torch.utils.data import DataLoader, ConcatDataset
@@ -5,7 +6,8 @@ from torchaudio.datasets import SPEECHCOMMANDS
 
 
 class SpeechCommandsDataset(SPEECHCOMMANDS):
-    def __init__(self, n_mels, root_dir='./data', subset='training', noise_factor=0.0, noise_to_spec=False):
+    def __init__(self, n_mels, root_dir='./data', subset='training',
+                 noise_factor=0.0, noise_to_spec=False, expand_factor=0.0):
         # Initialize SPEECHCOMMANDS dataset
         super().__init__(root_dir, download=True, subset=subset)
 
@@ -18,34 +20,32 @@ class SpeechCommandsDataset(SPEECHCOMMANDS):
         # Flag to determine where to add noise
         self.noise_to_spec = noise_to_spec
 
+        # Expansion factor for time-stretching/shrinking
+        self.expand_factor = expand_factor
+
     def __getitem__(self, idx):
         # Get waveform and meta data
         waveform, sample_rate, label, speaker_id, utterance_number = super().__getitem__(idx)
 
+        # Apply time stretching or shrinking
+        if self.expand_factor > 0:
+            # random number between 1 +/- expand_factor
+            stretch_factor = 1.0 + (2 * torch.rand(1) - 1) * self.expand_factor
+            resampler = torchaudio.transforms.Resample(sample_rate, int(sample_rate * stretch_factor))
+            waveform = resampler(waveform)
+
         if self.noise_to_spec:
             # If noise_to_spec flag is True, add noise to spectrogram
-
-            # Apply MelSpectrogram transformation
             mel_specgram = self.transform(waveform)
-
-            # Add random white noise
             noisy_mel_specgram = mel_specgram + self.noise_factor * torch.randn(mel_specgram.shape)
-
-            # Squeeze unnecessary dimension
             mel_specgram = torch.squeeze(mel_specgram, dim=0)  # [n_mels, T]
             noisy_mel_specgram = torch.squeeze(noisy_mel_specgram, dim=0)  # [n_mels, T]
 
         else:
             # If noise_to_spec flag is False, add noise to waveform
-
-            # Add random white noise
             noisy_waveform = waveform + self.noise_factor * torch.randn(waveform.shape)
-
-            # Apply MelSpectrogram transformation to both clean and noisy waveform
             mel_specgram = self.transform(waveform)
             noisy_mel_specgram = self.transform(noisy_waveform)
-
-            # Squeeze unnecessary dimension
             mel_specgram = torch.squeeze(mel_specgram, dim=0)  # [n_mels, T]
             noisy_mel_specgram = torch.squeeze(noisy_mel_specgram, dim=0)  # [n_mels, T]
 
@@ -73,22 +73,38 @@ def pad_collate(batch):
 
     # Stack all padded waveforms in the batch and transpose last two dimensions
     # [batch_size, T', n_mels], list of sequence lengths
-    return torch.stack(clean_waveforms, dim=0).transpose(1, 2), torch.stack(noisy_waveforms, dim=0).transpose(1, 2), torch.tensor(seq_lengths)
+    clean_waveforms_stack = torch.stack(clean_waveforms, dim=0).transpose(1, 2)
+    noisy_waveforms_stack = torch.stack(noisy_waveforms, dim=0).transpose(1, 2)
+    return clean_waveforms_stack, noisy_waveforms_stack, torch.tensor(seq_lengths)
 
 
-def get_dataloader(root_dir, n_mels, batch_size, subset='training', lite=None, noise_factor=0.005, noise_to_spec=False):
+def get_dataloader(root_dir, n_mels, batch_size, subset='training', lite=None,
+                   noise_factor=0.005, noise_to_spec=False, expand_factor=0.0):
     """
     Returns a DataLoader for the SpeechCommandsDataset.
     """
-    # Initialize SpeechCommandsDataset for clean and possibly noisy datasets
-    clean_dataset = SpeechCommandsDataset(n_mels, root_dir, subset=subset, noise_factor=0.0)
+    # Always initialize SpeechCommandsDataset for clean datasets
+    datasets = [SpeechCommandsDataset(n_mels, root_dir, subset=subset, noise_factor=0.0,
+                                      noise_to_spec=noise_to_spec, expand_factor=0.0)]
 
+    # If noise_factor > 0, initialize SpeechCommandsDataset for noisy datasets
     if noise_factor > 0:
-        noisy_dataset = SpeechCommandsDataset(n_mels, root_dir, subset=subset,
-                                              noise_factor=noise_factor, noise_to_spec=noise_to_spec)
-        dataset = ConcatDataset([clean_dataset, noisy_dataset])
-    else:
-        dataset = clean_dataset
+        datasets.append(SpeechCommandsDataset(n_mels, root_dir, subset=subset,
+                                              noise_factor=noise_factor, noise_to_spec=noise_to_spec, expand_factor=0.0))
+    # If expand_factor > 0, initialize SpeechCommandsDataset for expanded datasets
+    if expand_factor > 0:
+        datasets.append(SpeechCommandsDataset(n_mels, root_dir, subset=subset,
+                                              noise_factor=0.0,
+                                              noise_to_spec=noise_to_spec, expand_factor=expand_factor))
+
+        # If both noise_factor and expand_factor are > 0, initialize SpeechCommandsDataset for expanded noisy datasets
+        if noise_factor > 0:
+            datasets.append(SpeechCommandsDataset(n_mels, root_dir, subset=subset,
+                                                  noise_factor=noise_factor,
+                                                  noise_to_spec=noise_to_spec, expand_factor=expand_factor))
+
+    # Concatenate all datasets together
+    dataset = ConcatDataset(datasets)
 
     # If lite flag is set, only use a subset of the data
     if lite is not None:

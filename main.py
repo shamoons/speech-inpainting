@@ -110,11 +110,10 @@ def run_main(args):
 
         train_dataloader, train_dataset_size = get_dataloader(
             args.data_path, args.n_mels, batch_size, lite=args.lite,
-            noise_factor=args.noise_factor, noise_to_spec=args.noise_to_spec)
+            noise_factor=args.noise_factor, noise_to_spec=args.noise_to_spec, expand_factor=args.expand_factor)
         val_dataloader, val_dataset_size = get_dataloader(args.data_path, args.n_mels, batch_size,
                                                           subset='validation', lite=args.lite,
-                                                          noise_factor=args.noise_factor,
-                                                          noise_to_spec=args.noise_to_spec)
+                                                          noise_factor=0)
 
         model = TransformerCompressionAutoencoder(d_model=args.n_mels, num_layers=args.num_layers,
                                                   nhead=args.nhead, max_len=200, embedding_dim=args.embedding_dim,

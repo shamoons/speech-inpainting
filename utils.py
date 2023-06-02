@@ -45,4 +45,5 @@ def get_arg_parser():
     parser.add_argument('--noise_factor', type=float, default=0.005, help='Noise factor for data augmentation')
     parser.add_argument('--noise_to_spec', default=False, type=lambda x: (str(x).lower() == 'true'),
                         help='Add noise to spectrogram')
+    parser.add_argument('--expand_factor', type=float, default=1, help='Expand factor for data augmentation')
     return parser

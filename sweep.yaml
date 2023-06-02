@@ -10,15 +10,15 @@ command:
   - --use_cuda
 parameters:
   n_mels:
-    values: [100, 160]
+    values: [120, 160]
   nhead:
     value: 2
   num_layers:
     value: 4
   epochs:
-    value: 500
+    value: 1000     
   dropout:
-    values: [0.1, 0.2]
+    values: [0.0, 0.1]
   batch_size:
     value: 512
   base_lr:
@@ -28,10 +28,12 @@ parameters:
   use_layer_norm:
     value: False
   warmup_steps:
-    values: [0.05, 0.1]
+    value: 0.05
   dim_feedforward:
     value: 2048
   noise_factor:
-    values: [0.01, 0.001]
+    value: 0.1
   noise_to_spec:
-    values: [False, True]
+    value: True
+  expand_factor:
+    values: [0, 0.05, 0.1]
